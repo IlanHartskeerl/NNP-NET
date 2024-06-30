@@ -1,17 +1,21 @@
-#About this project
+# NNP-NET
 
 This repository is the original implementation of NNP-NET used in the thesis. It also contains and implementation of tsNET(*) and PMDS. The tsNET implementation is based on the bhtsne implementation that can be found [here](https://github.com/lvdmaaten/bhtsne). The PMDS implementation was taken from [OGDF](https://github.com/ogdf/ogdf) and modified in order to support more than 3 output dimensions.
 
-#Build
+## Build
 
 This project can be compiled using cmake using a c++ compiler as follows:
-`mkdir build
+
+```mkdir build
 cd build
 cmake ../
-make cc=_PREFFERED_COMPILER`
+make cc=_PREFFERED_COMPILER
+```
+
 This project has been validated to compile using both g++ and visual studios msvc compiler. It is also required to have python and tensorflow installed.
 
-#Usage
+## Usage
+
 This project can be used as follows:
 `./NNPNET TestGraphs/3elt.mtx`
 This will create a graph layout using NNP-NET of the graph at the relative path *TestGraphs/3elt.mtx* using all default settings, saving the output to *TestGraphs/3elt_out.vna*.
@@ -21,7 +25,8 @@ Will create graph layouts using tsNET* for all graphs in folder *TestGraphs* and
 
 Supported input file types are .vna, .mtx and .dot. Output will always be done to a .vna file.
 
-#Arguments
+## Arguments
+
 | Argument | Short | Description | Default value |
 | ----------- | ----------- | ----------- | ----------- |
 | --method | -m | Changes which graph layout method is used. Options are: NNP-NET, tsNET, tsNET* and PMDS | NNP-NET |
