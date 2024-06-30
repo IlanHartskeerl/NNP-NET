@@ -17,10 +17,13 @@ This project has been validated to compile using both g++ and visual studios msv
 ## Usage
 
 This project can be used as follows:
+
 `./NNPNET TestGraphs/3elt.mtx`
+
 This will create a graph layout using NNP-NET of the graph at the relative path *TestGraphs/3elt.mtx* using all default settings, saving the output to *TestGraphs/3elt_out.vna*.
 
 `./NNPNET TestGraphs -m tsNET* -o out`
+
 Will create graph layouts using tsNET* for all graphs in folder *TestGraphs* and save the output to the *out* folder.
 
 Supported input file types are .vna, .mtx and .dot. Output will always be done to a .vna file.
