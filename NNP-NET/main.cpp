@@ -38,6 +38,8 @@ enum Argument {
 	ARG_PMDS_PIVOTS,
 	ARG_OUTPATH,
 	ARG_DIMENSIONS,
+	ARG_TRAINING_EPOCHS,
+	ARG_BATCH_SIZE,
 
 	ARG_none
 };
@@ -67,8 +69,11 @@ std::unordered_map<std::string, Argument> argMap = {
 	{"--pmds_pivots", ARG_PMDS_PIVOTS},
 	{"-o", ARG_OUTPATH},
 	{"--output", ARG_OUTPATH},
-	{"-d", ARG_OUTPATH},
-	{"--dimensions", ARG_OUTPATH},
+	{"-d", ARG_DIMENSIONS},
+	{"--dimensions", ARG_DIMENSIONS},
+	{"-b", ARG_BATCH_SIZE},
+	{"--batch_size", ARG_BATCH_SIZE},
+	{"--training_epochs", ARG_TRAINING_EPOCHS},
 };
 
 
@@ -83,6 +88,8 @@ void createLayoutFor(std::string path, std::string outPath, std::unordered_map<A
 		nnpnet.theta = settings[ARG_THETA];
 		nnpnet.subgraphPoints = settings[ARG_SUBGRAPH_SIZE];
 		nnpnet.pmdsPivots = settings[ARG_PMDS_PIVOTS];
+		nnpnet.trainingEpochs = settings[ARG_TRAINING_EPOCHS];
+		nnpnet.batchSize = settings[ARG_BATCH_SIZE];
 
 		g.loadFromFile(path);
 		TIME(nnpnet.run(g, nullptr, settings[ARG_EMBEDDING_SIZE]);
@@ -96,6 +103,7 @@ void createLayoutFor(std::string path, std::string outPath, std::unordered_map<A
 	case METHOD_PMDS:
 	{
 		Graph<float> g(settings[ARG_DIMENSIONS]);
+		g.loadFromFile(path);
 		PivotMDS<float> pmds;
 		pmds.setNumberOfPivots(settings[ARG_PMDS_PIVOTS]);
 		TIME(pmds.call(g), "PMDS");
@@ -106,6 +114,7 @@ void createLayoutFor(std::string path, std::string outPath, std::unordered_map<A
 	case METHOD_TSNET:
 	{
 		Graph<double> g(settings[ARG_DIMENSIONS]);
+		g.loadFromFile(path);
 		TSNET<double> tsnet;
 		tsnet.perp = settings[ARG_PERP];
 		TIME(tsnet.tsNET(g, settings[ARG_THETA]), "tsNET");
@@ -116,6 +125,7 @@ void createLayoutFor(std::string path, std::string outPath, std::unordered_map<A
 	case METHOD_TSNETSTAR:
 	{
 		Graph<double> g(settings[ARG_DIMENSIONS]);
+		g.loadFromFile(path);
 		TSNET<double> tsnet;
 		tsnet.perp = settings[ARG_PERP];
 		TIME(tsnet.tsNETStar(g, settings[ARG_THETA]), "tsNET*");
@@ -124,6 +134,41 @@ void createLayoutFor(std::string path, std::string outPath, std::unordered_map<A
 	}
 	break;
 	}
+}
+
+void printSettings(std::unordered_map<Argument, double>& settings) {
+	std::cout << "Output dimensions: " << settings[ARG_DIMENSIONS] << "\n";
+	std::cout << "Method used: ";
+	switch((Method)(int)settings[ARG_METHOD]) {
+	case METHOD_TSNET: std::cout << "tsNET\n";
+		std::cout << "tsNET* settings: \n"
+			<< "\tPerplexity: " << settings[ARG_PERP] << "\n"
+			<< "\tTheta: " << settings[ARG_THETA] << "\n";
+		break;
+	case METHOD_TSNETSTAR: std::cout << "tsNET*\n";
+		std::cout << "tsNET* settings: \n" 
+			<< "\tPerplexity: " << settings[ARG_PERP] << "\n"
+			<< "\tTheta: " << settings[ARG_THETA] << "\n";
+		break;
+	case METHOD_NNPNET: std::cout << "NNP-NET\n";
+		std::cout << "NNP-NET settings: \n" 
+			<< "\tPerplexity: " << settings[ARG_PERP] << "\n"
+			<< "\tSubgraph size: " << (int)settings[ARG_SUBGRAPH_SIZE] << "\n"
+			<< "\tEmbedding size: " << (int)settings[ARG_EMBEDDING_SIZE] << "\n"
+			<< "\tTheta: " << settings[ARG_THETA] << "\n"
+			<< "\tSmoothing passes: " << settings[ARG_SMOOTH] << "\n"
+			<< "\tPMDS Pivots: " << settings[ARG_PMDS_PIVOTS] << "\n"
+			<< "\tBatch size: " << settings[ARG_BATCH_SIZE] << "\n"
+			<< "\tTraining epochs: " << settings[ARG_TRAINING_EPOCHS] << "\n"
+			<< "\tUses gpu: " << (settings[ARG_GPU] == 0? "No" : "Yes") << "\n";
+
+		break;
+	case METHOD_PMDS: std::cout << "PMDS\n";
+		std::cout << "tsNET* settings: \n" 
+			<< "\tPMDS Pivots: " << settings[ARG_PMDS_PIVOTS] << "\n";
+		break;
+	}
+	
 }
 
 int main(int argc, char* argv[])
@@ -144,6 +189,8 @@ int main(int argc, char* argv[])
 	settings[ARG_SUBGRAPH_SIZE] = 10000;
 	settings[ARG_PMDS_PIVOTS] = 250;
 	settings[ARG_DIMENSIONS] = 2;
+	settings[ARG_BATCH_SIZE] = 64;
+	settings[ARG_TRAINING_EPOCHS] = 40;
 
 
 	if (argc == 1) {
@@ -167,11 +214,12 @@ int main(int argc, char* argv[])
 			}
 			Argument setting = argMap[argv[i]];
 			i++;
-			if (i == argc || argMap.count(argv[i]) == 0) {
+			if (i == argc || argMap.count(argv[i]) > 0) {
 				i--;
 				std::cout << "Value missing for argument " << argv[i] << "\n";
 				continue;
 			}
+			std::string argS = std::string(argv[i]);
 			switch (setting) {
 				case ARG_SMOOTH:
 				case ARG_THETA:
@@ -179,6 +227,8 @@ int main(int argc, char* argv[])
 				case ARG_EMBEDDING_SIZE:
 				case ARG_SUBGRAPH_SIZE:
 				case ARG_DIMENSIONS:
+				case ARG_BATCH_SIZE:
+				case ARG_TRAINING_EPOCHS:
 				case ARG_PMDS_PIVOTS:
 					settings[setting] = std::stod(argv[i]);
 					break;
@@ -186,19 +236,19 @@ int main(int argc, char* argv[])
 					outPath = argv[i];
 					break;
 				case ARG_GPU:
-					settings[setting] = (argv[i] == "t" || argv[i] == "true" || argv[i] == "T" || argv[i] == "True" || argv[i] == "TRUE" || argv[i] == "y" || argv[i] == "Y" || argv[i] == "yes" || argv[i] == "Yes" || argv[i] == "YES" || argv[i] == "1");
+					settings[setting] = (argS == "t" || argS == "true" || argS == "T" || argS == "True" || argS == "TRUE" || argS == "y" || argS == "Y" || argS == "yes" || argS == "Yes" || argS == "YES" || argS == "1") ? 1 : 0;
 					break;
 				case ARG_METHOD:
-					if (argv[i] == "tsNET" || argv[i] == "tsnet" || argv[i] == "TSNET") {
+					if (argS == "tsNET" || argS == "tsnet" || argS == "TSNET") {
 						settings[setting] = METHOD_TSNET;
 					}
-					else if (argv[i] == "tsNET*" || argv[i] == "tsnet*" || argv[i] == "TSNET*") {
+					else if (argS == "tsNET*" || argS == "tsnet*" || argS == "TSNET*") {
 						settings[setting] = METHOD_TSNETSTAR;
 					}
-					else if (argv[i] == "pmds" || argv[i] == "PMDS" || argv[i] == "Pmds" || argv[i] == "PivotMDS" || argv[i] == "pivotmds" || argv[i] == "pivotMDS") {
+					else if (argS == "pmds" || argS == "PMDS" || argS == "Pmds" || argS == "PivotMDS" || argS == "pivotmds" || argS == "pivotMDS") {
 						settings[setting] = METHOD_PMDS;
 					}
-					else if (argv[i] == "NNP-NET" || argv[i] == "NNPNET" || argv[i] == "nnp-net" || argv[i] == "NNP-net" || argv[i] == "nnp-NET" || argv[i] == "nnpnet" || argv[i] == "nnpNet" || argv[i] == "nnpNET") {
+					else if (argS == "NNP-NET" || argS == "NNPNET" || argS == "nnp-net" || argS == "NNP-net" || argS == "nnp-NET" || argS == "nnpnet" || argS == "nnpNet" || argS == "nnpNET") {
 						settings[setting] = METHOD_NNPNET;
 					}
 					else {
@@ -211,7 +261,7 @@ int main(int argc, char* argv[])
 		}
 	}
 
-
+	printSettings(settings);
 
 	if (path[path.size() - 4] == '.') {
 		if (outPath == "") {

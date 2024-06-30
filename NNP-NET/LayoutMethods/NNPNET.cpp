@@ -512,6 +512,8 @@ void NNPNet::NNPNET::trainPlusInfer(float* smallEmbedding, int smallEmbeddingSiz
 		"smallEmbeddingSize"_a = smallEmbeddingSize,
 		"fullEmbeddingSize"_a = fullEmbeddingSize,
 		"embeddingDim"_a = embeddingDim,
+		"trainEpochs"_a = trainingEpochs,
+		"batchSize"_a = batchSize,
 		"outputDim"_a = outputDim
 		);
 
@@ -527,7 +529,7 @@ print("Imported standard")
 import getLists
 
 model = tf.keras.Sequential([
-    tf.keras.layers.InputLayer(input_shape=[embeddingDim], batch_size=64),
+    tf.keras.layers.InputLayer(input_shape=[embeddingDim], batch_size=batchSize),
     tf.keras.layers.Dense(256, activation="leaky_relu"),
     tf.keras.layers.Dense(512, activation="leaky_relu"),
     tf.keras.layers.Dense(256, activation="leaky_relu"),
@@ -536,7 +538,7 @@ model = tf.keras.Sequential([
 model.compile(optimizer='Adam',
               loss=tf.keras.losses.MeanSquaredError())
     
-model.fit(getLists.getSmallEmbedding(smallEmbeddingSize, embeddingDim), getLists.getGt(smallEmbeddingSize, outputDim), epochs=40, batch_size=64)
+model.fit(getLists.getSmallEmbedding(smallEmbeddingSize, embeddingDim), getLists.getGt(smallEmbeddingSize, outputDim), epochs=trainEpochs, batch_size=batchSize)
     
 outPredictions = model.predict(getLists.getFullEmbedding(fullEmbeddingSize, embeddingDim), batch_size=4096)
 )", py::globals(), loc);

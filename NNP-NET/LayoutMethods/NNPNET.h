@@ -9,7 +9,7 @@ namespace NNPNet {
 
 		void run(Graph<float>& g, Graph<double>* GT = nullptr, int embeddingSize = 50);
 
-		int subgraphPoints = 10000, perplexity = 40, pmdsPivots = 250;
+		int subgraphPoints = 10000, perplexity = 40, pmdsPivots = 250, trainingEpochs = 40, batchSize = 64;
 		bool pmdsEmbedding = true, fastSubgraph = true, gpu = false;
 
 		double theta = 0.25;
