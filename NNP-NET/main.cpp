@@ -40,6 +40,7 @@ enum Argument {
 	ARG_DIMENSIONS,
 	ARG_TRAINING_EPOCHS,
 	ARG_BATCH_SIZE,
+	ARG_USE_FLOAT,
 
 	ARG_none
 };
@@ -74,9 +75,12 @@ std::unordered_map<std::string, Argument> argMap = {
 	{"-b", ARG_BATCH_SIZE},
 	{"--batch_size", ARG_BATCH_SIZE},
 	{"--training_epochs", ARG_TRAINING_EPOCHS},
+	{"--use_float", ARG_USE_FLOAT},
+	{"-f", ARG_USE_FLOAT}
 };
 
 
+template<class T>
 void createLayoutFor(std::string path, std::string outPath, std::unordered_map<Argument, double>& settings) {
 	switch ((Method)(int)settings[ARG_METHOD]) {
 	case METHOD_NNPNET:
@@ -85,6 +89,7 @@ void createLayoutFor(std::string path, std::string outPath, std::unordered_map<A
 		NNPNET nnpnet;
 		nnpnet.perplexity = settings[ARG_PERP];
 		nnpnet.gpu = settings[ARG_GPU] > 0;
+		nnpnet.useFloats = settings[ARG_USE_FLOAT] > 0;
 		nnpnet.theta = settings[ARG_THETA];
 		nnpnet.subgraphPoints = settings[ARG_SUBGRAPH_SIZE];
 		nnpnet.pmdsPivots = settings[ARG_PMDS_PIVOTS];
@@ -102,9 +107,9 @@ void createLayoutFor(std::string path, std::string outPath, std::unordered_map<A
 		break;
 	case METHOD_PMDS:
 	{
-		Graph<float> g(settings[ARG_DIMENSIONS]);
+		Graph<T> g(settings[ARG_DIMENSIONS]);
 		g.loadFromFile(path);
-		PivotMDS<float> pmds;
+		PivotMDS<T> pmds;
 		pmds.setNumberOfPivots(settings[ARG_PMDS_PIVOTS]);
 		TIME(pmds.call(g), "PMDS");
 		std::cout << "Saving to " << outPath << "\n";
@@ -160,12 +165,14 @@ void printSettings(std::unordered_map<Argument, double>& settings) {
 			<< "\tPMDS Pivots: " << settings[ARG_PMDS_PIVOTS] << "\n"
 			<< "\tBatch size: " << settings[ARG_BATCH_SIZE] << "\n"
 			<< "\tTraining epochs: " << settings[ARG_TRAINING_EPOCHS] << "\n"
-			<< "\tUses gpu: " << (settings[ARG_GPU] == 0? "No" : "Yes") << "\n";
+			<< "\tUses gpu: " << (settings[ARG_GPU] == 0? "No" : "Yes") << "\n"
+			<< "\tUses float precision: " << (settings[ARG_USE_FLOAT] == 0 ? "Double" : "Float") << "\n";
 
 		break;
 	case METHOD_PMDS: std::cout << "PMDS\n";
 		std::cout << "tsNET* settings: \n" 
-			<< "\tPMDS Pivots: " << settings[ARG_PMDS_PIVOTS] << "\n";
+			<< "\tPMDS Pivots: " << settings[ARG_PMDS_PIVOTS] << "\n"
+			<< "\tUses float precision: " << (settings[ARG_USE_FLOAT] == 0 ? "Double" : "Float") << "\n";
 		break;
 	}
 	
@@ -191,6 +198,7 @@ int main(int argc, char* argv[])
 	settings[ARG_DIMENSIONS] = 2;
 	settings[ARG_BATCH_SIZE] = 64;
 	settings[ARG_TRAINING_EPOCHS] = 40;
+	settings[ARG_USE_FLOAT] = 1;
 
 
 	if (argc == 1) {
@@ -236,6 +244,7 @@ int main(int argc, char* argv[])
 					outPath = argv[i];
 					break;
 				case ARG_GPU:
+				case ARG_USE_FLOAT:
 					settings[setting] = (argS == "t" || argS == "true" || argS == "T" || argS == "True" || argS == "TRUE" || argS == "y" || argS == "Y" || argS == "yes" || argS == "Yes" || argS == "YES" || argS == "1") ? 1 : 0;
 					break;
 				case ARG_METHOD:
@@ -270,7 +279,13 @@ int main(int argc, char* argv[])
 		if (!(outPath[outPath.size() - 3] == 'v' && outPath[outPath.size() - 2] == 'n' && outPath[outPath.size() - 1] == 'a')) {
 			outPath += ".vna";
 		}
-		createLayoutFor(path, outPath, settings);
+		if (settings[ARG_USE_FLOAT]) {
+			createLayoutFor<float>(path, outPath, settings);
+		}
+		else {
+			createLayoutFor<double>(path, outPath, settings);
+		}
+		
 	}
 	else {
 		for (const auto& entry : fs::directory_iterator(path)) {
@@ -295,7 +310,12 @@ int main(int argc, char* argv[])
 				oPath += fileName.substr(0, fileName.length() - 4) + ".vna";
 			}
 
-			createLayoutFor(p, oPath, settings);
+			if (settings[ARG_USE_FLOAT]) {
+				createLayoutFor<float>(p, oPath, settings);
+			}
+			else {
+				createLayoutFor<double>(p, oPath, settings);
+			}
 		}
 	}
 

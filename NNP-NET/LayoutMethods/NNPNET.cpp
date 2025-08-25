@@ -90,9 +90,20 @@ float* NNPNet::NNPNET::createPMDSEmbedding(Graph<float>& g, int& dimensions)
 	g.Y = embedding;
 	g.outputDim = dimensions;
 
-	PivotMDS<float> pmds;
-	pmds.setNumberOfPivots(pmdsPivots);
-	pmds.call(g);
+	if (useFloats) {
+		PivotMDS<float> pmds;
+		pmds.setNumberOfPivots(pmdsPivots);
+		pmds.call(g);
+	}
+	else {
+		Graph<double> g_d(g);
+		PivotMDS<double> pmds;
+		pmds.setNumberOfPivots(pmdsPivots);
+		pmds.call(g_d);
+		for (int i = 0; i < g.nodeCount * dimensions; i++) {
+			g.Y[i] = (float)g_d.Y[i];
+		}
+	}
 
 	bool hasNaN = false;
 	for (int i = 0; i < g.nodeCount * dimensions; i++) {

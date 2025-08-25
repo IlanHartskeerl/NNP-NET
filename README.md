@@ -44,3 +44,4 @@ Supported input file types are .vna, .mtx and .dot. Output will always be done t
 | --pmds_pivots |  | Number of pivot points used by PMDS | 250 |
 | --batch_size | -b | Batch size used for training NNP as part of NNP-NET | 64 |
 | --training_epochs |  | Training epochs used for training NNP as part of NNP-NET | 40 |
+| --use_float | -f | Uses float instead of doubles for PMDS. Only effects PMDS calls. Doubles might be needed for very large graphs | True |
