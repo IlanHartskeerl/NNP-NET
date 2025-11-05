@@ -209,9 +209,9 @@ namespace NNPNet {
 				}
 			}
 			// set the new positions to the graph
-			for (int i = 0; i < n; i++) {
-				for (int d = 0; d < m_dimensionCount; d++) {
-					G.Y[i * m_dimensionCount + d] = coord[d][i];
+			for (size_t i = 0; i < n; i++) {
+				for (size_t d = 0; d < m_dimensionCount; d++) {
+					G.Y[i * ((size_t)m_dimensionCount) + d] = coord[d][i];
 				}
 			}
 		};
