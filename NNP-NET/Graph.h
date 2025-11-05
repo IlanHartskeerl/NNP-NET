@@ -46,7 +46,7 @@ namespace NNPNet {
 				}
 				i++;
 			}
-			Y = (T*)malloc(nodeCount * outputDim * sizeof(T));
+			Y = (T*)malloc(((size_t)nodeCount) * ((size_t)outputDim) * sizeof(T));
 		}
 
 		~Graph() {
@@ -525,19 +525,19 @@ namespace NNPNet {
 
 		void normalize() {
 			T* min, * max;
-			min = (T*)malloc(sizeof(T) * outputDim);
-			max = (T*)malloc(sizeof(T) * outputDim);
+			min = (T*)malloc(sizeof(T) * ((size_t)outputDim));
+			max = (T*)malloc(sizeof(T) * ((size_t)outputDim));
 			for (int i = 0; i < outputDim; i++) {
 				min[i] = Y[i];
 				max[i] = Y[i];
 			}
-			for (int i = 1; i < nodeCount; i++) {
-				for (int d = 0; d < outputDim; d++) {
-					if (min[d] > Y[i * outputDim + d]) {
-						min[d] = Y[i * outputDim + d];
+			for (size_t i = 1; i < nodeCount; i++) {
+				for (size_t d = 0; d < outputDim; d++) {
+					if (min[d] > Y[i * ((size_t)outputDim) + d]) {
+						min[d] = Y[i * ((size_t)outputDim) + d];
 					}
-					if (max[d] < Y[i * outputDim + d]) {
-						max[d] = Y[i * outputDim + d];
+					if (max[d] < Y[i * ((size_t)outputDim) + d]) {
+						max[d] = Y[i * ((size_t)outputDim) + d];
 					}
 				}
 			}
@@ -547,9 +547,9 @@ namespace NNPNet {
 					maxSize = max[i] - min[i];
 				}
 			}
-			for (int i = 0; i < nodeCount; i++) {
-				for (int d = 0; d < outputDim; d++) {
-					Y[i * outputDim + d] = (Y[i * outputDim + d] - min[d]) / maxSize;
+			for (size_t i = 0; i < nodeCount; i++) {
+				for (size_t d = 0; d < outputDim; d++) {
+					Y[i * ((size_t)outputDim) + d] = (Y[i * ((size_t)outputDim) + d] - min[d]) / maxSize;
 				}
 			}
 		};
