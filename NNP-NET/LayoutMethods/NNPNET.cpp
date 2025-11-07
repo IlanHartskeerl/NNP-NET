@@ -63,11 +63,11 @@ int* NNPNet::NNPNET::run(Graph<float>& g, bool* inAll, Graph<double>* GT, int pi
 
 float* NNPNet::NNPNET::createPivotEmbedding(Graph<float>& g, int pivots)
 {
-	float* embedding = (float*)malloc(g.nodeCount * pivots * sizeof(float));
-	int n = g.nodeCount;
-	int pivot = 0;
+	float* embedding = (float*)malloc(((size_t)g.nodeCount) * ((size_t)pivots) * sizeof(float));
+	size_t n = g.nodeCount;
+	size_t pivot = 0;
 	float* lowest = (float*)malloc(sizeof(float) * n);
-	for (int i = 0; i < pivots; i++) {
+	for (size_t i = 0; i < pivots; i++) {
 		g.getDistances(pivot, embedding + i*n);
 
 		if (i + 1 < pivots) {
@@ -82,7 +82,7 @@ float* NNPNet::NNPNET::createPivotEmbedding(Graph<float>& g, int pivots)
 				}
 				continue;
 			}
-			int p_i = i * n;
+			size_t p_i = i * n;
 			for (int j = 0; j < n; j++) {
 				if (embedding[p_i] < lowest[j]) {
 					lowest[j] = embedding[p_i];
@@ -96,16 +96,16 @@ float* NNPNet::NNPNET::createPivotEmbedding(Graph<float>& g, int pivots)
 		}
 	}
 	float biggest = 0;
-	for (int i = 0; i < g.nodeCount; i++) {
-		for (int j = 0; j < pivots; j++) {
-			if (embedding[j * g.nodeCount + i] > biggest) {
-				biggest = embedding[j * g.nodeCount + i];
+	for (size_t i = 0; i < g.nodeCount; i++) {
+		for (size_t j = 0; j < pivots; j++) {
+			if (embedding[j * ((size_t)g.nodeCount) + i] > biggest) {
+				biggest = embedding[j * ((size_t)g.nodeCount) + i];
 			}
 		}
 	}
-	for (int i = 0; i < g.nodeCount; i++) {
-		for (int j = 0; j < pivots; j++) {
-			embedding[j * g.nodeCount + i] /= biggest;
+	for (size_t i = 0; i < g.nodeCount; i++) {
+		for (size_t j = 0; j < pivots; j++) {
+			embedding[j * ((size_t)g.nodeCount) + i] /= biggest;
 		}
 	}
 	
@@ -114,10 +114,10 @@ float* NNPNet::NNPNET::createPivotEmbedding(Graph<float>& g, int pivots)
 
 float* NNPNet::NNPNET::createPMDSEmbedding(Graph<float>& g, int& dimensions, bool* inAll, int** pivotPoints)
 {
-	float* embedding = (float*)malloc(g.nodeCount * dimensions * sizeof(float));
-	int n = g.nodeCount;
+	float* embedding = (float*)malloc(((size_t)g.nodeCount) * ((size_t)dimensions) * sizeof(float));
+	size_t n = g.nodeCount;
 	float* backupY = g.Y;
-	int backupDim = g.outputDim;
+	size_t backupDim = g.outputDim;
 	g.Y = embedding;
 	g.outputDim = dimensions;
 
@@ -147,13 +147,13 @@ float* NNPNet::NNPNET::createPMDSEmbedding(Graph<float>& g, int& dimensions, boo
 		else {
 			pmds_d.call(g_d);
 		}
-		for (int i = 0; i < g.nodeCount * dimensions; i++) {
+		for (int i = 0; i < ((size_t)g.nodeCount) * ((size_t)dimensions); i++) {
 			g.Y[i] = (float)g_d.Y[i];
 		}
 	}
 
 	bool hasNaN = false;
-	for (int i = 0; i < g.nodeCount * dimensions; i++) {
+	for (size_t i = 0; i < ((size_t)g.nodeCount) * ((size_t)dimensions); i++) {
 		if (std::isnan(embedding[i])) {
 			hasNaN = true;
 			break;
@@ -480,7 +480,7 @@ void NNPNet::NNPNET::trainNetwork(Graph<float>& g, Graph<double>* GT, float* emb
 			float* smallEmbedding = (float*)malloc(subG.nodeCount * embeddingDim * sizeof(float));
 			for (int i = 0; i < subG.nodeCount; i++) {
 				for (int d = 0; d < embeddingDim; d++) {
-					smallEmbedding[i*embeddingDim + d] = embedding[nodes[i] * embeddingDim + d];
+					smallEmbedding[i*embeddingDim + d] = embedding[((size_t)nodes[i]) * ((size_t)embeddingDim) + (size_t)d];
 				}
 			}
 			double* outputLabels = (double*)malloc(subG.nodeCount * GT->outputDim * sizeof(double));
@@ -516,7 +516,7 @@ void NNPNet::NNPNET::trainNetwork(Graph<float>& g, Graph<double>* GT, float* emb
 		float* smallEmbedding = (float*)malloc(subG.nodeCount * embeddingDim * sizeof(float));
 		for (int i = 0; i < subG.nodeCount; i++) {
 			for (int d = 0; d < embeddingDim; d++) {
-				smallEmbedding[i * embeddingDim + d] = embedding[nodes[i] * embeddingDim + d];
+				smallEmbedding[i * embeddingDim + d] = embedding[((size_t)nodes[i]) * ((size_t)embeddingDim) + (size_t)d];
 			}
 		}
 
@@ -542,13 +542,13 @@ static bool first = true;
 static void* loc = nullptr;
 
 PYBIND11_EMBEDDED_MODULE(getLists, m) {
-	m.def("getSmallEmbedding", [](int smallEmbeddingSize, int embeddingDim) {
+	m.def("getSmallEmbedding", [](size_t smallEmbeddingSize, size_t embeddingDim) {
 		return py::array_t<float>({ smallEmbeddingSize, embeddingDim }, _smallEmbedding);
 		});
-	m.def("getGt", [](int smallEmbeddingSize, int outputDim) {
+	m.def("getGt", [](size_t smallEmbeddingSize, size_t outputDim) {
 		return py::array_t<float>({ smallEmbeddingSize, outputDim }, _gt);
 		});
-	m.def("getFullEmbedding", [](int fullEmbeddingSize, int embeddingDim) {
+	m.def("getFullEmbedding", [](size_t fullEmbeddingSize, size_t embeddingDim) {
 		return py::array_t<float>({ fullEmbeddingSize, embeddingDim }, _fullEmbedding);
 		});
 }
