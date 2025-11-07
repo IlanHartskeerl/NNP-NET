@@ -9,7 +9,7 @@ file(GLOB ANNSources RELATIVE "ANN/src" "*.cpp")
 
 add_subdirectory("pybind11")
 
-add_executable (NNPNET "main.cpp" "main.h" "Graph.h"  "Utils.h" "LayoutMethods/PivotMDS.h"  "LayoutMethods/tsNET.h"  "LayoutMethods/NNPNET.h"  "LayoutMethods/NNPNET.cpp"   "ANN/include/ANN/ANN.h" "ANN/include/ANN/ANNperf.h" "ANN/include/ANN/ANNx.h" "ANN/src/ANN.cpp" "ANN/src/bd_fix_rad_search.cpp" "ANN/src/bd_pr_search.cpp" "ANN/src/bd_search.cpp" "ANN/src/bd_tree.cpp" "ANN/src/brute.cpp" "ANN/src/kd_dump.cpp" "ANN/src/kd_fix_rad_search.cpp" "ANN/src/kd_pr_search.cpp" "ANN/src/kd_search.cpp" "ANN/src/kd_split.cpp" "ANN/src/kd_tree.cpp" "ANN/src/kd_util.cpp" "ANN/src/perf.cpp" "Threading.h" "Threading.cpp" "LayoutMethods/tsNETTree/sptree.h" "LayoutMethods/tsNETTree/sptree.cpp" "Smoothing.h")
+add_executable (NNPNET "main.cpp" "main.h" "Graph.h"  "Utils.h" "LayoutMethods/PivotMDS.h"  "LayoutMethods/tsNET.h"  "LayoutMethods/NNPNET.h"  "LayoutMethods/NNPNET.cpp"   "ANN/include/ANN/ANN.h" "ANN/include/ANN/ANNperf.h" "ANN/include/ANN/ANNx.h" "ANN/src/ANN.cpp" "ANN/src/bd_fix_rad_search.cpp" "ANN/src/bd_pr_search.cpp" "ANN/src/bd_search.cpp" "ANN/src/bd_tree.cpp" "ANN/src/brute.cpp" "ANN/src/kd_dump.cpp" "ANN/src/kd_fix_rad_search.cpp" "ANN/src/kd_pr_search.cpp" "ANN/src/kd_search.cpp" "ANN/src/kd_split.cpp" "ANN/src/kd_tree.cpp" "ANN/src/kd_util.cpp" "ANN/src/perf.cpp" "Threading.h" "Threading.cpp" "LayoutMethods/tsNETTree/sptree.h" "LayoutMethods/tsNETTree/sptree.cpp" "Smoothing.h" "Procrustes.h" "Procrustes.cpp")
 
 target_include_directories(NNPNET PRIVATE "ANN/include")
 

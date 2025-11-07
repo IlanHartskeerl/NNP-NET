@@ -20,7 +20,7 @@ void NNPNet::NNPNET::run(Graph<float>& g, Graph<double>* GT, int pivots)
 {
 	float* embedding;
 	if (pmdsEmbedding) {
-		TIME(embedding = createPMDSEmbedding(g, pivots), "Create Embedding");
+		TIME(embedding = createPMDSEmbedding(g, pivots, nullptr, nullptr), "Create Embedding");
 	}
 	else {
 		TIME(embedding = createPivotEmbedding(g, pivots), "Create Embedding");
@@ -28,6 +28,37 @@ void NNPNet::NNPNET::run(Graph<float>& g, Graph<double>* GT, int pivots)
 
 	trainNetwork(g, GT, embedding, pivots);
 	free(embedding);
+}
+
+void NNPNet::NNPNET::run(Graph<float>& g, int* pivotPoints, Graph<double>* GT, int pivots)
+{
+	float* embedding;
+	if (pmdsEmbedding) {
+		TIME(embedding = createPMDSEmbedding(g, pivots, nullptr, &pivotPoints), "Create Embedding");
+	}
+	else {
+		TIME(embedding = createPivotEmbedding(g, pivots), "Create Embedding");
+	}
+
+	//trainNetwork(g, GT, embedding, pivots);
+	infer(embedding, g.nodeCount, g.outputDim, g.Y);
+	free(embedding);
+}
+
+int* NNPNet::NNPNET::run(Graph<float>& g, bool* inAll, Graph<double>* GT, int pivots)
+{
+	float* embedding;
+	int* pivotPoints;
+	if (pmdsEmbedding) {
+		TIME(embedding = createPMDSEmbedding(g, pivots, inAll, &pivotPoints), "Create Embedding");
+	}
+	else {
+		TIME(embedding = createPivotEmbedding(g, pivots), "Create Embedding");
+	}
+
+	trainNetwork(g, GT, embedding, pivots);
+	free(embedding);
+	return pivotPoints;
 }
 
 float* NNPNet::NNPNET::createPivotEmbedding(Graph<float>& g, int pivots)
@@ -81,7 +112,7 @@ float* NNPNet::NNPNET::createPivotEmbedding(Graph<float>& g, int pivots)
 	return embedding;
 }
 
-float* NNPNet::NNPNET::createPMDSEmbedding(Graph<float>& g, int& dimensions)
+float* NNPNet::NNPNET::createPMDSEmbedding(Graph<float>& g, int& dimensions, bool* inAll, int** pivotPoints)
 {
 	float* embedding = (float*)malloc(g.nodeCount * dimensions * sizeof(float));
 	int n = g.nodeCount;
@@ -91,15 +122,31 @@ float* NNPNet::NNPNET::createPMDSEmbedding(Graph<float>& g, int& dimensions)
 	g.outputDim = dimensions;
 
 	if (useFloats) {
-		PivotMDS<float> pmds;
-		pmds.setNumberOfPivots(pmdsPivots);
-		pmds.call(g);
+		
+		pmds_f.setNumberOfPivots(pmdsPivots);
+		if (inAll != nullptr) {
+			(*pivotPoints) = pmds_f.call(g, inAll);
+		}
+		else if (pivotPoints != nullptr){
+			pmds_f.call(g, *pivotPoints);
+		}
+		else {
+			pmds_f.call(g);
+		}
 	}
 	else {
 		Graph<double> g_d(g);
-		PivotMDS<double> pmds;
-		pmds.setNumberOfPivots(pmdsPivots);
-		pmds.call(g_d);
+		
+		pmds_d.setNumberOfPivots(pmdsPivots);
+		if (inAll != nullptr) {
+			(*pivotPoints) = pmds_d.call(g_d, inAll);
+		}
+		else if (pivotPoints != nullptr) {
+			pmds_d.call(g_d, *pivotPoints);
+		}
+		else {
+			pmds_d.call(g_d);
+		}
 		for (int i = 0; i < g.nodeCount * dimensions; i++) {
 			g.Y[i] = (float)g_d.Y[i];
 		}
@@ -492,6 +539,7 @@ static float* _gt = nullptr;
 static float* _fullEmbedding = nullptr;
 static float* _smallEmbedding = nullptr;
 static bool first = true;
+static void* loc = nullptr;
 
 PYBIND11_EMBEDDED_MODULE(getLists, m) {
 	m.def("getSmallEmbedding", [](int smallEmbeddingSize, int embeddingDim) {
@@ -518,8 +566,8 @@ void NNPNet::NNPNET::trainPlusInfer(float* smallEmbedding, int smallEmbeddingSiz
 	smallEmbeddingSize -= (smallEmbeddingSize%64);
 
 	// Call the python script
-	
-	auto loc = py::dict(
+	if (loc != nullptr) delete (py::dict*)loc;
+	auto l = new py::dict(
 		"smallEmbeddingSize"_a = smallEmbeddingSize,
 		"fullEmbeddingSize"_a = fullEmbeddingSize,
 		"embeddingDim"_a = embeddingDim,
@@ -527,6 +575,7 @@ void NNPNet::NNPNET::trainPlusInfer(float* smallEmbedding, int smallEmbeddingSiz
 		"batchSize"_a = batchSize,
 		"outputDim"_a = outputDim
 		);
+	loc = l;
 
 	py::exec(R"(
 import keras
@@ -552,12 +601,24 @@ model.compile(optimizer='Adam',
 model.fit(getLists.getSmallEmbedding(smallEmbeddingSize, embeddingDim), getLists.getGt(smallEmbeddingSize, outputDim), epochs=trainEpochs, batch_size=batchSize)
     
 outPredictions = model.predict(getLists.getFullEmbedding(fullEmbeddingSize, embeddingDim), batch_size=4096)
-)", py::globals(), loc);
+)", py::globals(), (*(py::dict*)loc));
 
-	float* out = (float*)loc["outPredictions"].cast<py::array>().data();
+	float* out = (float*)(*(py::dict*)loc)["outPredictions"].cast<py::array>().data();
 
 	memcpy(Y, out, fullEmbeddingSize * outputDim * sizeof(float));
 
 	free(fgt);
 	
+}
+
+void NNPNet::NNPNET::infer(float* fullEmbedding, int fullEmbeddingSize, int outputDim, float* Y)
+{
+	_fullEmbedding = fullEmbedding;
+	(*(py::dict*)loc)["fullEmbeddingSize"] = fullEmbeddingSize;
+	py::exec(R"(
+outPredictions = model.predict(getLists.getFullEmbedding(fullEmbeddingSize, embeddingDim), batch_size=4096)
+)", py::globals(), (*(py::dict*)loc));
+	float* out = (float*)(*(py::dict*)loc)["outPredictions"].cast<py::array>().data();
+
+	memcpy(Y, out, fullEmbeddingSize * outputDim * sizeof(float));
 }

@@ -41,6 +41,7 @@ enum Argument {
 	ARG_TRAINING_EPOCHS,
 	ARG_BATCH_SIZE,
 	ARG_USE_FLOAT,
+	ARG_TIME_SERIES,
 
 	ARG_none
 };
@@ -76,7 +77,8 @@ std::unordered_map<std::string, Argument> argMap = {
 	{"--batch_size", ARG_BATCH_SIZE},
 	{"--training_epochs", ARG_TRAINING_EPOCHS},
 	{"--use_float", ARG_USE_FLOAT},
-	{"-f", ARG_USE_FLOAT}
+	{"-f", ARG_USE_FLOAT},
+	{"--time_series", ARG_TIME_SERIES},
 };
 
 
@@ -96,24 +98,158 @@ void createLayoutFor(std::string path, std::string outPath, std::unordered_map<A
 		nnpnet.trainingEpochs = settings[ARG_TRAINING_EPOCHS];
 		nnpnet.batchSize = settings[ARG_BATCH_SIZE];
 
-		g.loadFromFile(path);
-		TIME(nnpnet.run(g, nullptr, settings[ARG_EMBEDDING_SIZE]);
-		if (settings[ARG_SMOOTH] >= 1) {
-			SmoothingFunctions::Laplacian(g, settings[ARG_SMOOTH]);
-		}, "NNP-NET");
-		std::cout << "Saving to " << outPath << "\n";
-		g.saveToVNA(outPath);
+		if (settings[ARG_TIME_SERIES]) {
+			g.loadFromFile(path);
+			g.fillNodeNames();
+			int* pivotPoints;
+			{ // Training
+				int i = 1;
+				std::string tsdPath = path.substr(0, path.size() - 4) + std::to_string(i) + ".tsd";
+
+				Graph<float> _g(g);
+				while (std::filesystem::exists(tsdPath)) {
+					_g.loadTimeSeries(tsdPath, true);
+
+					i++;
+					tsdPath = path.substr(0, path.size() - 4) + std::to_string(i) + ".tsd";
+				}
+				bool* inAll = (bool*)malloc(_g.nodeCount);
+				_g.onlyConnectedFrom(0);
+				for (int i = 0; i < g.nodeCount; i++) {
+					inAll[i] = true;
+				}
+				for (int i = g.nodeCount; i < _g.nodeCount; i++) {
+					inAll[i] = false;
+				}
+				TIME(pivotPoints = nnpnet.run(_g, inAll, nullptr, settings[ARG_EMBEDDING_SIZE]);
+				if (settings[ARG_SMOOTH] >= 1) {
+					SmoothingFunctions::Laplacian(_g, settings[ARG_SMOOTH]);
+				}, "NNP-NET");
+
+				free(inAll);
+			}
+			{ // First time-step
+				Graph<float> _g(g);
+				_g.onlyConnectedFrom(0);
+				TIME(nnpnet.run(_g, pivotPoints, nullptr, settings[ARG_EMBEDDING_SIZE]);
+				if (settings[ARG_SMOOTH] >= 1) {
+					SmoothingFunctions::Laplacian(_g, settings[ARG_SMOOTH]);
+				}, "NNP-NET");
+				std::cout << "Saving to " << outPath << "\n";
+				_g.saveToVNA(outPath);
+			}
+
+			int i = 1;
+			std::string tsdPath = path.substr(0, path.size() - 4) + std::to_string(i) + ".tsd";
+			// Subsequent time-steps
+			while (std::filesystem::exists(tsdPath)) {
+				g.loadTimeSeries(tsdPath);
+				{
+					Graph<float> _g(g);
+					_g.onlyConnectedFrom(0);
+					TIME(nnpnet.run(_g, pivotPoints, nullptr, settings[ARG_EMBEDDING_SIZE]);
+					if (settings[ARG_SMOOTH] >= 1) {
+						SmoothingFunctions::Laplacian(_g, settings[ARG_SMOOTH]);
+					}, "NNP-NET");
+					std::cout << "Saving to " << outPath << "\n";
+					_g.saveToVNA(outPath.substr(0, outPath.size() - 4) + std::to_string(i) + ".vna");
+				}
+
+				i++;
+				tsdPath = path.substr(0, path.size() - 4) + std::to_string(i) + ".tsd";
+			}
+			free(pivotPoints);
+		}
+		else {
+			// Not time-series
+			g.loadFromFile(path);
+			g.fillNodeNames();
+			g.onlyConnectedFrom(0);
+			if (!g.checkFullyConnected()) {
+				std::cout << "Not fully connected\n";
+			}
+			TIME(nnpnet.run(g, nullptr, settings[ARG_EMBEDDING_SIZE]);
+			if (settings[ARG_SMOOTH] >= 1) {
+				SmoothingFunctions::Laplacian(g, settings[ARG_SMOOTH]);
+			}, "NNP-NET");
+			std::cout << "Saving to " << outPath << "\n";
+			g.saveToVNA(outPath);
+		}
+
 	}
 		break;
 	case METHOD_PMDS:
 	{
-		Graph<T> g(settings[ARG_DIMENSIONS]);
-		g.loadFromFile(path);
-		PivotMDS<T> pmds;
-		pmds.setNumberOfPivots(settings[ARG_PMDS_PIVOTS]);
-		TIME(pmds.call(g), "PMDS");
-		std::cout << "Saving to " << outPath << "\n";
-		g.saveToVNA(outPath);
+		if (settings[ARG_TIME_SERIES]) {
+			Graph<T> g(settings[ARG_DIMENSIONS]);
+			g.loadFromFile(path);
+			g.fillNodeNames();
+			// Check which nodes are in all time series
+
+			PivotMDS<T> pmds;
+			pmds.setNumberOfPivots(settings[ARG_PMDS_PIVOTS]);
+			int* pivotPoints;
+
+			{ // Get pivot points that are in all time-steps
+				int i = 1;
+				Graph<T> _g(g);
+				std::string tsdPath = path.substr(0, path.size() - 4) + std::to_string(i) + ".tsd";
+				while (std::filesystem::exists(tsdPath)) {
+					_g.loadTimeSeries(tsdPath, true);
+					i++;
+					tsdPath = path.substr(0, path.size() - 4) + std::to_string(i) + ".tsd";
+				}
+
+				Graph<T> __g(g);
+				__g.onlyConnectedFrom(0);
+				bool* inAll = (bool*)malloc(_g.nodeCount * sizeof(bool));
+
+				for (int j = 0; j < _g.nodeCount; j++) {
+					inAll[j] = __g.namesToId.count(j) > 0;
+				}
+
+				TIME(pivotPoints = pmds.call(_g, inAll), "PMDS");
+
+				free(inAll);
+			}
+
+			{ // First time-step
+				Graph<T> _g(g);
+				_g.onlyConnectedFrom(0);
+				TIME(pmds.call(_g, pivotPoints), "PMDS");
+				std::cout << "Saving to " << outPath << "\n";
+				_g.saveToVNA(outPath);
+			}
+
+			int i = 1;
+			std::string tsdPath = path.substr(0, path.size() - 4) + std::to_string(i) + ".tsd";
+			// All subsequent time-steps
+			while (std::filesystem::exists(tsdPath)) {
+				g.loadTimeSeries(tsdPath);
+				Graph<T> _g(g);
+				_g.onlyConnectedFrom(0);
+
+				pmds.setNumberOfPivots(settings[ARG_PMDS_PIVOTS]);
+				TIME(pmds.call(_g, pivotPoints), "PMDS");
+				std::cout << "Saving to " << outPath << "\n";
+				_g.saveToVNA(outPath.substr(0, outPath.size() - 4) + std::to_string(i) + ".vna");
+
+				i++;
+				tsdPath = path.substr(0, path.size() - 4) + std::to_string(i) + ".tsd";
+			}
+			
+
+			free(pivotPoints);
+		}
+		else { // PMDS non time series
+			Graph<T> g(settings[ARG_DIMENSIONS]);
+			g.loadFromFile(path);
+			PivotMDS<T> pmds;
+			pmds.setNumberOfPivots(settings[ARG_PMDS_PIVOTS]);
+			TIME(pmds.call(g), "PMDS");
+			std::cout << "Saving to " << outPath << "\n";
+			g.saveToVNA(outPath);
+		}
 	}
 		break;
 	case METHOD_TSNET:
@@ -166,13 +302,15 @@ void printSettings(std::unordered_map<Argument, double>& settings) {
 			<< "\tBatch size: " << settings[ARG_BATCH_SIZE] << "\n"
 			<< "\tTraining epochs: " << settings[ARG_TRAINING_EPOCHS] << "\n"
 			<< "\tUses gpu: " << (settings[ARG_GPU] == 0? "No" : "Yes") << "\n"
-			<< "\tUses float precision: " << (settings[ARG_USE_FLOAT] == 0 ? "Double" : "Float") << "\n";
+			<< "\tUses float precision: " << (settings[ARG_USE_FLOAT] == 0 ? "Double" : "Float") << "\n"
+			<< "\tTime series data: " << (settings[ARG_TIME_SERIES] == 0 ? "No" : "Yes") << "\n";
 
 		break;
 	case METHOD_PMDS: std::cout << "PMDS\n";
 		std::cout << "tsNET* settings: \n" 
 			<< "\tPMDS Pivots: " << settings[ARG_PMDS_PIVOTS] << "\n"
-			<< "\tUses float precision: " << (settings[ARG_USE_FLOAT] == 0 ? "Double" : "Float") << "\n";
+			<< "\tUses float precision: " << (settings[ARG_USE_FLOAT] == 0 ? "Double" : "Float") << "\n"
+			<< "\tTime series data: " << (settings[ARG_TIME_SERIES] == 0 ? "No" : "Yes") << "\n";
 		break;
 	}
 	
@@ -198,7 +336,8 @@ int main(int argc, char* argv[])
 	settings[ARG_DIMENSIONS] = 2;
 	settings[ARG_BATCH_SIZE] = 64;
 	settings[ARG_TRAINING_EPOCHS] = 40;
-	settings[ARG_USE_FLOAT] = 1;
+	settings[ARG_USE_FLOAT] = 0;
+	settings[ARG_TIME_SERIES] = 0;
 
 
 	if (argc == 1) {
@@ -244,6 +383,7 @@ int main(int argc, char* argv[])
 					outPath = argv[i];
 					break;
 				case ARG_GPU:
+				case ARG_TIME_SERIES:
 				case ARG_USE_FLOAT:
 					settings[setting] = (argS == "t" || argS == "true" || argS == "T" || argS == "True" || argS == "TRUE" || argS == "y" || argS == "Y" || argS == "yes" || argS == "Yes" || argS == "YES" || argS == "1") ? 1 : 0;
 					break;

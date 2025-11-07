@@ -32,11 +32,11 @@
  * http://www.gnu.org/copyleft/gpl.html
  */
 
-/*
-* The version of PivotMDS used in this project is a modified version
-* of the implementation from Open Graph Drawing Framework (OGDF).
-* Of note is the support for more than 3 output dimensions.
-*/
+ /*
+ * The version of PivotMDS used in this project is a modified version
+ * of the implementation from Open Graph Drawing Framework (OGDF).
+ * Of note is the support for more than 3 output dimensions.
+ */
 
 #pragma once
 
@@ -50,6 +50,9 @@
 #include <cmath>
 #include <math.h>
 #include <cstring>
+
+#define PROCRUSTES
+#include "../Procrustes.h"
 
 namespace NNPNet {
 
@@ -65,13 +68,16 @@ namespace NNPNet {
 	template<typename T>
 	class PivotMDS {
 	public:
+
+
 		PivotMDS()
 			: m_numberOfPivots(250)
 			, m_edgeCosts(100)
 			, m_hasEdgeCostsAttribute(false)
-			, m_forcing2DLayout(false) { }
+			, m_forcing2DLayout(false) {
+		}
 
-		~PivotMDS() { }
+		~PivotMDS() {}
 
 		//! Sets the number of pivots. If the new value is smaller or equal 0
 		//! the default value (250) is used.
@@ -102,6 +108,14 @@ namespace NNPNet {
 			pivotMDSLayout(GA);
 		};
 
+		int* call(Graph<T>& GA, bool* inAll) {
+			return pivotMDSLayout(GA, inAll);
+		};
+
+		void call(Graph<T>& GA, int* pivotPoints) {
+			pivotMDSLayout(GA, nullptr, pivotPoints);
+		};
+
 		void useEdgeCostsAttribute(bool useEdgeCostsAttribute) {
 			m_hasEdgeCostsAttribute = useEdgeCostsAttribute;
 		}
@@ -126,6 +140,13 @@ namespace NNPNet {
 
 		//! The costs to traverse an edge.
 		T m_edgeCosts;
+
+		// For time series data
+#ifdef PROCRUSTES
+		double* m_prevEvecs = nullptr;
+#else
+		std::vector<std::vector<double>> m_prevEvecs = {};
+#endif
 
 		//! Tells whether the pivot mds is based on uniform edge costs or a
 		//! edge costs attribute
@@ -169,7 +190,7 @@ namespace NNPNet {
 		};
 
 		//! Computes the pivot mds layout of the given connected graph of \p GA.
-		void pivotMDSLayout(Graph<T>& G) {
+		int* pivotMDSLayout(Graph<T>& G, bool* inAll = nullptr, int* pivotPoints = nullptr) {
 			//m_dimensionCount = GA.has(Graph::threeD) && !m_forcing2DLayout ? 3 : 2;
 			bool use3D = false;
 			m_dimensionCount = G.outputDim;
@@ -179,19 +200,25 @@ namespace NNPNet {
 
 			// trivial cases
 			if (n == 0) {
-				return;
+				return nullptr;
 			}
 
 			if (n == 1) {
 				for (int i = 0; i < n; i++) {
 					G.Y[i] = 0;
 				}
-				return;
+				return nullptr;
 			}
 
 			std::vector<std::vector<T>> pivDistMatrix;
 			// compute the pivot matrix
-			getPivotDistanceMatrix(G, pivDistMatrix);
+			int* choosenPivots = nullptr;
+			if (pivotPoints != nullptr) {
+				getPivotDistanceMatrix(G, pivotPoints, pivDistMatrix);
+			}
+			else {
+				choosenPivots = getPivotDistanceMatrix(G, pivDistMatrix, inAll);
+			}
 			// center the pivot matrix
 			centerPivotmatrix(pivDistMatrix);
 			// init the coordinate matrix
@@ -200,7 +227,7 @@ namespace NNPNet {
 			}
 			// init the eigen values std::vector
 			std::vector<double> eVals(m_dimensionCount);
-			singularValueDecomposition(pivDistMatrix, coord, eVals);
+			singularValueDecomposition(pivDistMatrix, coord, eVals, pivotPoints != nullptr || inAll != nullptr);
 			// compute the correct aspect ratio
 			for (int i = 0; i < coord.size(); i++) {
 				eVals[i] = sqrt(eVals[i]);
@@ -214,11 +241,12 @@ namespace NNPNet {
 					G.Y[i * m_dimensionCount + d] = coord[d][i];
 				}
 			}
+			return choosenPivots;
 		};
 
 		//! Computes the eigen value decomposition based on power iteration.
 		void eigenValueDecomposition(std::vector<std::vector<T>>& K, std::vector<std::vector<double>>& eVecs,
-			std::vector<double>& eValues) {
+			std::vector<double>& eValues, bool timeSeries) {
 			randomize(eVecs);
 			const int p = K.size();
 			T r = 0;
@@ -292,10 +320,54 @@ namespace NNPNet {
 				}
 				count++;
 			}
+			// Ensure time series stability
+#ifdef PROCRUSTES
+			if (timeSeries) {
+				if (m_prevEvecs == nullptr) {
+					m_prevEvecs = (double*)malloc(sizeof(double) * m_dimensionCount * p);
+					for (int i = 0; i < m_dimensionCount; i++) {
+						memcpy((void*)(m_prevEvecs + (i * p)), eVecs[i].data(), sizeof(double) * p);
+					}
+				}
+				else {
+					double* temp = (double*)malloc(sizeof(double) * m_dimensionCount * p);
+					for (int i = 0; i < m_dimensionCount; i++) {
+						memcpy((void*)(temp + (i * p)), eVecs[i].data(), sizeof(double) * p);
+					}
+
+					Procrustes::solve(temp, m_prevEvecs, m_dimensionCount, p);
+
+					for (int i = 0; i < m_dimensionCount; i++) {
+						memcpy(eVecs[i].data(), (void*)(temp + (i * p)), sizeof(double) * p);
+					}
+					free(temp);
+				}
+			}
+#else
+			if (m_prevEvecs.size() == 0) {
+				// Save these eVecs
+				m_prevEvecs.resize(eVecs.size());
+				for (int i = 0; i < eVecs.size(); i++) {
+					m_prevEvecs[i].resize(eVecs[i].size());
+					memcpy(m_prevEvecs[i].data(), eVecs[i].data(), eVecs[i].size() * sizeof(double));
+				}
+			}
+			else {
+				// Allign current eVecs with previous
+				for (int i = 0; i < eVecs.size(); i++) {
+					auto res = prod(eVecs[i], m_prevEvecs[i]);
+					if (res < 0) {
+						for (int j = 0; j < eVecs[i].size(); j++) {
+							eVecs[i][j] *= -1;
+						}
+					}
+				}
+			}
+#endif
 		};
 
 		//! Computes the pivot distance matrix based on the maxmin strategy
-		void getPivotDistanceMatrix(Graph<T>& G, std::vector<std::vector<T>>& pivDistMatrix) {
+		int* getPivotDistanceMatrix(Graph<T>& G, std::vector<std::vector<T>>& pivDistMatrix, bool* inAll) {
 			const int n = G.nodeCount;
 
 			// lower the number of pivots if necessary
@@ -303,6 +375,7 @@ namespace NNPNet {
 			if (numberOfPivots > n) {
 				numberOfPivots = n;
 			}
+			int* choosenPivots = (int*)malloc(sizeof(int) * numberOfPivots);
 			// number of pivots times n matrix used to store the graph distances
 			pivDistMatrix.resize(numberOfPivots);
 			int pivot = 0;
@@ -316,25 +389,79 @@ namespace NNPNet {
 					T highest = 0;
 					if (i == 0) {
 						std::memcpy(lowest.data(), pivDistMatrix[0].data(), n * sizeof(T));
+						if (inAll == nullptr) {
+							for (int j = 0; j < n; j++) {
+								if (lowest[j] > highest) {
+									highest = lowest[j];
+									pivot = j;
+								}
+							}
+						}
+						else {
+							choosenPivots[0] = G.nodeNames[0];
+							for (int j = 0; j < n; j++) {
+								if (lowest[j] > highest && inAll[G.nodeNames[j]]) {
+									highest = lowest[j];
+									pivot = j;
+								}
+							}
+							choosenPivots[i + 1] = G.nodeNames[pivot];
+						}
+						continue;
+					}
+					if (inAll == nullptr) {
 						for (int j = 0; j < n; j++) {
+							if (pivDistMatrix[i][j] < lowest[j]) {
+								lowest[j] = pivDistMatrix[i][j];
+							}
 							if (lowest[j] > highest) {
 								highest = lowest[j];
 								pivot = j;
 							}
 						}
-						continue;
 					}
-					for (int j = 0; j < n; j++) {
-						if (pivDistMatrix[i][j] < lowest[j]) {
-							lowest[j] = pivDistMatrix[i][j];
+					else {
+						choosenPivots[0] = G.nodeNames[0];
+						for (int j = 0; j < n; j++) {
+							if (!inAll[G.nodeNames[j]]) continue;
+							if (pivDistMatrix[i][j] < lowest[j]) {
+								lowest[j] = pivDistMatrix[i][j];
+							}
+							if (lowest[j] > highest) {
+								highest = lowest[j];
+								pivot = j;
+							}
 						}
-						if (lowest[j] > highest) {
-							highest = lowest[j];
-							pivot = j;
-						}
+						choosenPivots[i + 1] = G.nodeNames[pivot];
 					}
 				}
 			}
+			if (inAll == nullptr) {
+				free(choosenPivots);
+				return nullptr;
+			}
+			return choosenPivots;
+		};
+
+		//! Computes the pivot distance matrix based on the maxmin strategy
+		void getPivotDistanceMatrix(Graph<T>& G, int* pivotPoints, std::vector<std::vector<T>>& pivDistMatrix) {
+			const int n = G.nodeCount;
+
+			// lower the number of pivots if necessary
+			int numberOfPivots = m_numberOfPivots;
+			if (numberOfPivots > n) {
+				numberOfPivots = n;
+			}
+			// number of pivots times n matrix used to store the graph distances
+			pivDistMatrix.resize(numberOfPivots);
+			auto f = [&pivDistMatrix, &pivotPoints, &G, n](int begin, int end)
+				{
+					for (int i = begin; i < end; i++) {
+						pivDistMatrix[i].resize(n);
+						G.getDistances(G.namesToId[pivotPoints[i]], pivDistMatrix[i].data());
+					}
+				};
+			Threadpool::divideWork(f, numberOfPivots);
 		};
 
 		//! Normalizes the vector \p x.
@@ -373,7 +500,7 @@ namespace NNPNet {
 		//! Computes the self product of \p d.
 		template<typename P>
 		void selfProduct(const std::vector<std::vector<P>>& d, std::vector<std::vector<P>>& result) {
-			
+
 			auto f = [&d, &result](int begin, int end) {
 				for (int i = begin; i < end; i++) {
 					for (int j = 0; j <= i; j++) {
@@ -385,14 +512,14 @@ namespace NNPNet {
 						result[j][i] = sum;
 					}
 				}
-			};
+				};
 			Threadpool::divideWork(f, d.size());
 
 		};
 
 		//! Computes the singular value decomposition of matrix \p K.
 		void singularValueDecomposition(std::vector<std::vector<T>>& pivDistMatrix, std::vector<std::vector<double>>& eVecs,
-			std::vector<double>& eVals) {
+			std::vector<double>& eVals, bool timeSeries) {
 			const int size = pivDistMatrix.size();
 			const int n = pivDistMatrix[0].size();
 			std::vector<std::vector<T>> K(size);
@@ -407,7 +534,7 @@ namespace NNPNet {
 				tmp[i].resize(size);
 			}
 
-			eigenValueDecomposition(K, tmp, eVals);
+			eigenValueDecomposition(K, tmp, eVals, timeSeries);
 
 			// C^Tx
 			auto f = [this, &eVals, &eVecs, &pivDistMatrix, &tmp, n, size](int begin, int end) {
@@ -426,7 +553,7 @@ namespace NNPNet {
 				for (int i = begin; i < end; i++) {
 					normalize(eVecs[i]);
 				}
-			};
+				};
 			Threadpool::divideWork(f, m_dimensionCount);
 		};
 	};

@@ -47,6 +47,13 @@ namespace NNPNet {
 				i++;
 			}
 			Y = (T*)malloc(nodeCount * outputDim * sizeof(T));
+			if (g.nodeNames.size() > 0) {
+				nodeNames.resize(g.nodeNames.size());
+				memcpy(nodeNames.data(), g.nodeNames.data(), sizeof(int) * g.nodeNames.size());
+				for (int i = 0; i < nodeCount; i++) {
+					namesToId[nodeNames[i]] = i;
+				}
+			}
 		}
 
 		~Graph() {
@@ -86,7 +93,7 @@ namespace NNPNet {
 			for (int i = 0; i < nodeCount; i++) {
 				dist[i] = -1;
 			}
-			getDistances(0, dist);
+			bfs(0, dist);
 			for (int i = 0; i < nodeCount; i++) {
 				if (dist[i] == -1) {
 					return false;
@@ -368,12 +375,22 @@ namespace NNPNet {
 				}
 				int n0 = std::stoi(splitted[0]) - 1;
 				int n1 = std::stoi(splitted[1]) - 1;
+				if (n0 == n1) continue;
 				int biggest = n0 < n1 ? n1 + 1 : n0 + 1;
 				if (edges.size() < biggest) {
 					edges.resize(biggest);
 				}
-				edges[n0].push_back(Edge(n1, w));
-				edges[n1].push_back(Edge(n0, w));
+				bool exists = false;
+				for (auto e : edges[n0]) {
+					if (e.other == n1) {
+						exists = true;
+						break;
+					}
+				}
+				if (!exists) {
+					edges[n0].push_back(Edge(n1, w));
+					edges[n1].push_back(Edge(n0, w));
+				}
 			}
 			nodeCount = edges.size();
 			Y = (T*)malloc(nodeCount * outputDim * sizeof(T));
@@ -476,24 +493,187 @@ namespace NNPNet {
 			Y = (T*)malloc(nodeCount * outputDim * sizeof(T));
 		}
 
+		void loadTimeSeries(std::string path, bool onlyAdds = false) {
+			std::ifstream infile(path);
+
+			std::string line;
+			namesToId.clear();
+			for (int i = 0; i < nodeCount; i++) {
+				namesToId[nodeNames[i]] = i;
+			}
+
+			while (std::getline(infile, line)) {
+				auto split = Utils::split(line, ' ');
+				if (split[0] == "dn" && !onlyAdds) {
+					int node = namesToId[std::stoi(split[1])];
+					// Remove edges that reference this node
+					for (auto e : edges[node]) {
+						for (int i = 0; i < edges[e.other].size(); i++) {
+							if (edges[e.other][i].other == node) {
+								edges[e.other][i] = edges[e.other][edges[e.other].size() - 1];
+								edges[e.other].pop_back();
+								break;
+							}
+						}
+					}
+					int swap = nodeCount - 1;
+					namesToId[nodeNames[swap]] = node;
+					edges[node].clear();
+					edges[node] = edges[swap];
+					edges.pop_back();
+					nodeNames[node] = nodeNames[swap];
+					nodeNames.pop_back();
+
+					// Fix edges of moved node
+					for (auto e : edges[node]) {
+						for (int i = 0; i < edges[e.other].size(); i++) {
+							if (edges[e.other][i].other == swap) {
+								edges[e.other][i].other = node;
+								break;
+							}
+						}
+					}
+
+					nodeCount--;
+				}
+				else if (split[0] == "an") {
+					nodeNames.push_back(std::stoi(split[1]));
+					namesToId[std::stoi(split[1])] = nodeCount;
+					nodeCount++;
+					edges.resize(nodeCount);
+				}
+				else if (split[0] == "ae") {
+					int a = namesToId[std::stoi(split[1])];
+					int b = namesToId[std::stoi(split[2])];
+					float w = 1;
+					if (split.size() > 3) {
+						w = std::stof(split[3]);
+					}
+					edges[a].push_back(Edge<T>(b, w));
+					edges[b].push_back(Edge<T>(a, w));
+				}
+				else if (split[0] == "cw") {
+					int a = namesToId[std::stoi(split[1])];
+					int b = namesToId[std::stoi(split[2])];
+					float w = std::stof(split[3]);
+					for (int i = 0; i < edges[a].size(); i++) {
+						if (edges[a][i].other == b) {
+							edges[a][i].weight = w;
+							break;
+						}
+					}
+					for (int i = 0; i < edges[b].size(); i++) {
+						if (edges[b][i].other == a) {
+							edges[b][i].weight = w;
+							break;
+						}
+					}
+				}
+			}
+			free(Y);
+			Y = (T*)malloc(sizeof(T) * outputDim * nodeCount);
+
+		}
+
+		bool* checkNodesInAllTimeSeries(std::string path) {
+			std::vector<char> inAll;
+			inAll.resize(nodeCount);
+			
+			for (int j = 0; j < nodeCount; j++) {
+				inAll[j] = true;
+			}
+
+			int i = 1;
+			std::string tsdPath = path.substr(0, path.size() - 4) + std::to_string(i) + ".tsd";
+			while (std::filesystem::exists(tsdPath)) {
+				std::ifstream infile(tsdPath);
+				
+				std::string line;
+
+				while (std::getline(infile, line)) {
+					if (line.size() > 1) {
+						auto split = Utils::split(line, ' ');
+						if (split[0] == "dn") {
+							inAll[std::stoi(split[1])] = false;
+						}
+					}
+				}
+
+				i++;
+				tsdPath = path.substr(0, path.size() - 4) + std::to_string(i) + ".tsd";
+			}
+
+			bool* res = (bool*)malloc(sizeof(bool) * inAll.size());
+			memcpy(res, inAll.data(), sizeof(bool) * inAll.size());
+			return res;
+		}
+
+		void onlyConnectedFrom(int id) {
+			T* distances = (T*)malloc(nodeCount * sizeof(T));
+
+			for (int i = 0; i < nodeCount; i++) {
+				distances[i] = -1;
+			}
+			bfs(id, distances);
+			for (int i = nodeCount - 1; i >= 0; i--) {
+				if (distances[i] == -1) {
+					for (auto e : edges[i]) {
+						for (int j = 0; j < edges[e.other].size(); j++) {
+							if (edges[e.other][j].other == i) {
+								edges[e.other][j] = edges[e.other][edges[e.other].size() - 1];
+								edges[e.other].pop_back();
+								break;
+							}
+						}
+					}
+					edges[i].clear();
+					int swap = nodeCount - 1;
+					nodeNames[i] = nodeNames[swap];
+					nodeNames.pop_back();
+					edges[i].clear();
+					edges[i] = edges[swap];
+					for (auto e : edges[i]) {
+						for (int j = 0; j < edges[e.other].size(); j++) {
+							if (edges[e.other][j].other == swap) {
+								edges[e.other][j].other = i;
+								break;
+							}
+						}
+					}
+					edges.pop_back();
+					nodeCount--;
+				}
+			}
+			free(Y);
+			Y = (T*)malloc(sizeof(T) * outputDim * nodeCount);
+			namesToId.clear();
+			for (int i = 0; i < nodeCount; i++) {
+				namesToId[nodeNames[i]] = i;
+			}
+		}
+
 
 		void saveToVNA(std::string path) {
+			if (nodeNames.size() == 0) {
+				fillNodeNames();
+			}
+
 			std::ofstream file;
 			file.open(path);
 			file << "*Node data\nID\n";
 			for (int i = 0; i < nodeCount; i++) {
-				file << std::to_string(i) << '\n';
+				file << std::to_string(nodeNames[i]) << '\n';
 			}
 			if (outputDim == 2) {
 				file << "*Node properties\nID x y\n";
 				for (int i = 0; i < nodeCount; i++) {
-					file << i << " " << Y[i * 2] << " " << Y[i * 2 + 1] << "\n";
+					file << nodeNames[i] << " " << Y[i * 2] << " " << Y[i * 2 + 1] << "\n";
 				}
 			}
 			else if (outputDim == 3) {
 				file << "*Node properties\nID x y z\n";
 				for (int i = 0; i < nodeCount; i++) {
-					file << i << " " << Y[i * 3] << " " << Y[i * 3 + 1] << " " << Y[i * 3 + 2] << "\n";
+					file << nodeNames[i] << " " << Y[i * 3] << " " << Y[i * 3 + 1] << " " << Y[i * 3 + 2] << "\n";
 				}
 			}
 			else {
@@ -503,7 +683,7 @@ namespace NNPNet {
 				}
 				file << "\n";
 				for (int i = 0; i < nodeCount; i++) {
-					file << i;
+					file << nodeNames[i];
 					for (int j = 0; j < outputDim; j++) {
 						file << " " << Y[i * outputDim + j];
 					}
@@ -515,7 +695,7 @@ namespace NNPNet {
 			for (auto& edge : edges) {
 				for (auto to : edge) {
 					if (to.other < i) continue; // Skip duplicated edges
-					file << i << " " << to.other << " " << to.weight << '\n';
+					file << nodeNames[i] << " " << nodeNames[to.other] << " " << to.weight << '\n';
 				}
 				i++;
 			}
@@ -563,8 +743,17 @@ namespace NNPNet {
 			return sqrt(tot);
 		}
 
+		void fillNodeNames() {
+			nodeNames.clear();
+			for (int i = 0; i < nodeCount; i++) {
+				nodeNames.push_back(i);
+			}
+		}
+
 		int nodeCount = -1, outputDim;
 		std::vector<std::vector<Edge<T>>> edges;
+		std::vector<int> nodeNames;
+		std::unordered_map<int, int> namesToId;
 
 		T* Y = nullptr;
 

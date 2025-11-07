@@ -9,10 +9,10 @@ This project can be compiled using cmake using a c++ compiler as follows:
 ```mkdir build
 cd build
 cmake ../
-make cc=_PREFFERED_COMPILER
+make
 ```
 
-This project has been validated to compile using both g++ and visual studios msvc compiler. It is also required to have python and tensorflow installed.
+This project has been validated to compile using both g++ and visual studios msvc compiler. It is also required to have python and tensorflow installed. If layouts for time-series data are made, then python library skippy is also required.
 
 ## Usage
 
@@ -45,3 +45,10 @@ Supported input file types are .vna, .mtx and .dot. Output will always be done t
 | --batch_size | -b | Batch size used for training NNP as part of NNP-NET | 64 |
 | --training_epochs |  | Training epochs used for training NNP as part of NNP-NET | 40 |
 | --use_float | -f | Uses float instead of doubles for PMDS. Only effects PMDS calls. Doubles might be needed for very large graphs | True |
+| --time_series |  | Loads time series data and uses stable PMDS and NNP-NET for the layout. Does not work for tsNET(*) | False |
+
+## Time series data
+
+Layouts for time-series data can be created by setting the `--time_series` flag to true. This will only have an effect when using either PMDS or NNP-NET. The first time-step has to be a standard graph file in any supported format. All subsequent time-steps only describe the change from one time-step to the next. An example of the expected format can be found in folder TestTimeseries. In order to run this example, you would use the following command:
+
+`./NNPNET TestTimeseries/3elt.mtx --time_series 1`
