@@ -8,6 +8,7 @@
 #include <iostream>
 #include <math.h>
 #include <fstream>
+#include <cstring>
 
 #include "Utils.h"
 
@@ -29,6 +30,13 @@ namespace NNPNet {
 	public:
 
 		Graph(int outputDimensions) : edges() { this->outputDim = outputDimensions; };
+
+		Graph(size_t outputDimensions, size_t nodeCount) : edges() { 
+			this->outputDim = outputDimensions; 
+			this->nodeCount = nodeCount;
+			Y = (T*)malloc(outputDimensions*nodeCount*sizeof(T));
+			edges.resize(nodeCount);
+		};
 
 		/// <summary>
 		/// Copy constructor for when the output type does not match
@@ -585,23 +593,23 @@ namespace NNPNet {
 
 			int i = 1;
 			std::string tsdPath = path.substr(0, path.size() - 4) + std::to_string(i) + ".tsd";
-			while (std::filesystem::exists(tsdPath)) {
-				std::ifstream infile(tsdPath);
+			// while (std::filesystem::exists(tsdPath)) {
+			// 	std::ifstream infile(tsdPath);
 				
-				std::string line;
+			// 	std::string line;
 
-				while (std::getline(infile, line)) {
-					if (line.size() > 1) {
-						auto split = Utils::split(line, ' ');
-						if (split[0] == "dn") {
-							inAll[std::stoi(split[1])] = false;
-						}
-					}
-				}
+			// 	while (std::getline(infile, line)) {
+			// 		if (line.size() > 1) {
+			// 			auto split = Utils::split(line, ' ');
+			// 			if (split[0] == "dn") {
+			// 				inAll[std::stoi(split[1])] = false;
+			// 			}
+			// 		}
+			// 	}
 
-				i++;
-				tsdPath = path.substr(0, path.size() - 4) + std::to_string(i) + ".tsd";
-			}
+			// 	i++;
+			// 	tsdPath = path.substr(0, path.size() - 4) + std::to_string(i) + ".tsd";
+			// }
 
 			bool* res = (bool*)malloc(sizeof(bool) * inAll.size());
 			memcpy(res, inAll.data(), sizeof(bool) * inAll.size());

@@ -14,6 +14,7 @@ endif()
 
 
 project ("NNPNET")
+project ("NNP_NET")
 
 # Include sub-projects.
 add_subdirectory ("NNP-NET")

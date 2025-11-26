@@ -14,7 +14,19 @@ add_executable (NNPNET "main.cpp" "main.h" "Graph.h"  "Utils.h" "LayoutMethods/P
 target_include_directories(NNPNET PRIVATE "ANN/include")
 
 target_include_directories(NNPNET PRIVATE "pybind11/include")
+set(PYBIND11_FINDPYTHON ON)
 target_link_libraries(NNPNET PRIVATE pybind11::embed)
+
+# python library
+
+pybind11_add_module(NNP_NET "main.cpp" "main.h" "Graph.h"  "Utils.h" "LayoutMethods/PivotMDS.h"  "LayoutMethods/tsNET.h"  "LayoutMethods/NNPNET.h"  "LayoutMethods/NNPNET.cpp"   "ANN/include/ANN/ANN.h" "ANN/include/ANN/ANNperf.h" "ANN/include/ANN/ANNx.h" "ANN/src/ANN.cpp" "ANN/src/bd_fix_rad_search.cpp" "ANN/src/bd_pr_search.cpp" "ANN/src/bd_search.cpp" "ANN/src/bd_tree.cpp" "ANN/src/brute.cpp" "ANN/src/kd_dump.cpp" "ANN/src/kd_fix_rad_search.cpp" "ANN/src/kd_pr_search.cpp" "ANN/src/kd_search.cpp" "ANN/src/kd_split.cpp" "ANN/src/kd_tree.cpp" "ANN/src/kd_util.cpp" "ANN/src/perf.cpp" "Threading.h" "Threading.cpp" "LayoutMethods/tsNETTree/sptree.h" "LayoutMethods/tsNETTree/sptree.cpp" "Smoothing.h" "Procrustes.h" "Procrustes.cpp")
+target_include_directories(NNP_NET PRIVATE "ANN/include")
+
+target_include_directories(NNP_NET PRIVATE "pybind11/include")
+set(PYBIND11_FINDPYTHON ON)
+target_link_libraries(NNP_NET PRIVATE pybind11::embed)
+install(TARGETS NNP_NET DESTINATION .)
+
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "MSVC" AND CMAKE_BUILD_TYPE MATCHES "Release")
    target_compile_options(NNPNET PRIVATE /Zi)
@@ -45,5 +57,6 @@ endif()
 
 if (CMAKE_VERSION VERSION_GREATER 3.12)
   set_property(TARGET NNPNET PROPERTY CXX_STANDARD 17)
+  set_property(TARGET NNP_NET PROPERTY CXX_STANDARD 17)
 endif()
 

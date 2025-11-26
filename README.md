@@ -2,6 +2,9 @@
 
 This repository is the original implementation of NNP-NET used in the thesis. It also contains and implementation of tsNET(*) and PMDS. The tsNET implementation is based on the bhtsne implementation that can be found [here](https://github.com/lvdmaaten/bhtsne). The PMDS implementation was taken from [OGDF](https://github.com/ogdf/ogdf) and modified in order to support more than 3 output dimensions.
 
+## Python
+The build process will also create a python library. For an example of how to use this library, see the example.py file.
+
 ## Build
 
 This project can be compiled using cmake using a c++ compiler as follows:

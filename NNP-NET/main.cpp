@@ -8,6 +8,8 @@
 #include <filesystem>
 namespace fs = std::filesystem;
 
+#include <cstring>
+
 #include "main.h"
 #include "Graph.h"
 
@@ -22,6 +24,10 @@ namespace fs = std::filesystem;
 using namespace NNPNet;
 
 #include "pybind11/embed.h"
+#include <pybind11/stl.h>
+#include <pybind11/complex.h>
+#include <pybind11/functional.h>
+#include <pybind11/chrono.h>
 #include <pybind11/numpy.h>
 namespace py = pybind11;
 using namespace py::literals;
@@ -177,7 +183,7 @@ void createLayoutFor(std::string path, std::string outPath, std::unordered_map<A
 		}
 
 	}
-		break;
+	break;
 	case METHOD_PMDS:
 	{
 		if (settings[ARG_TIME_SERIES]) {
@@ -237,7 +243,7 @@ void createLayoutFor(std::string path, std::string outPath, std::unordered_map<A
 				i++;
 				tsdPath = path.substr(0, path.size() - 4) + std::to_string(i) + ".tsd";
 			}
-			
+
 
 			free(pivotPoints);
 		}
@@ -251,7 +257,7 @@ void createLayoutFor(std::string path, std::string outPath, std::unordered_map<A
 			g.saveToVNA(outPath);
 		}
 	}
-		break;
+	break;
 	case METHOD_TSNET:
 	{
 		Graph<double> g(settings[ARG_DIMENSIONS]);
@@ -262,7 +268,7 @@ void createLayoutFor(std::string path, std::string outPath, std::unordered_map<A
 		std::cout << "Saving to " << outPath << "\n";
 		g.saveToVNA(outPath);
 	}
-		break;
+	break;
 	case METHOD_TSNETSTAR:
 	{
 		Graph<double> g(settings[ARG_DIMENSIONS]);
@@ -280,19 +286,19 @@ void createLayoutFor(std::string path, std::string outPath, std::unordered_map<A
 void printSettings(std::unordered_map<Argument, double>& settings) {
 	std::cout << "Output dimensions: " << settings[ARG_DIMENSIONS] << "\n";
 	std::cout << "Method used: ";
-	switch((Method)(int)settings[ARG_METHOD]) {
+	switch ((Method)(int)settings[ARG_METHOD]) {
 	case METHOD_TSNET: std::cout << "tsNET\n";
 		std::cout << "tsNET* settings: \n"
 			<< "\tPerplexity: " << settings[ARG_PERP] << "\n"
 			<< "\tTheta: " << settings[ARG_THETA] << "\n";
 		break;
 	case METHOD_TSNETSTAR: std::cout << "tsNET*\n";
-		std::cout << "tsNET* settings: \n" 
+		std::cout << "tsNET* settings: \n"
 			<< "\tPerplexity: " << settings[ARG_PERP] << "\n"
 			<< "\tTheta: " << settings[ARG_THETA] << "\n";
 		break;
 	case METHOD_NNPNET: std::cout << "NNP-NET\n";
-		std::cout << "NNP-NET settings: \n" 
+		std::cout << "NNP-NET settings: \n"
 			<< "\tPerplexity: " << settings[ARG_PERP] << "\n"
 			<< "\tSubgraph size: " << (int)settings[ARG_SUBGRAPH_SIZE] << "\n"
 			<< "\tEmbedding size: " << (int)settings[ARG_EMBEDDING_SIZE] << "\n"
@@ -301,19 +307,19 @@ void printSettings(std::unordered_map<Argument, double>& settings) {
 			<< "\tPMDS Pivots: " << settings[ARG_PMDS_PIVOTS] << "\n"
 			<< "\tBatch size: " << settings[ARG_BATCH_SIZE] << "\n"
 			<< "\tTraining epochs: " << settings[ARG_TRAINING_EPOCHS] << "\n"
-			<< "\tUses gpu: " << (settings[ARG_GPU] == 0? "No" : "Yes") << "\n"
+			<< "\tUses gpu: " << (settings[ARG_GPU] == 0 ? "No" : "Yes") << "\n"
 			<< "\tUses float precision: " << (settings[ARG_USE_FLOAT] == 0 ? "Double" : "Float") << "\n"
 			<< "\tTime series data: " << (settings[ARG_TIME_SERIES] == 0 ? "No" : "Yes") << "\n";
 
 		break;
 	case METHOD_PMDS: std::cout << "PMDS\n";
-		std::cout << "tsNET* settings: \n" 
+		std::cout << "tsNET* settings: \n"
 			<< "\tPMDS Pivots: " << settings[ARG_PMDS_PIVOTS] << "\n"
 			<< "\tUses float precision: " << (settings[ARG_USE_FLOAT] == 0 ? "Double" : "Float") << "\n"
 			<< "\tTime series data: " << (settings[ARG_TIME_SERIES] == 0 ? "No" : "Yes") << "\n";
 		break;
 	}
-	
+
 }
 
 int main(int argc, char* argv[])
@@ -368,45 +374,45 @@ int main(int argc, char* argv[])
 			}
 			std::string argS = std::string(argv[i]);
 			switch (setting) {
-				case ARG_SMOOTH:
-				case ARG_THETA:
-				case ARG_PERP:
-				case ARG_EMBEDDING_SIZE:
-				case ARG_SUBGRAPH_SIZE:
-				case ARG_DIMENSIONS:
-				case ARG_BATCH_SIZE:
-				case ARG_TRAINING_EPOCHS:
-				case ARG_PMDS_PIVOTS:
-					settings[setting] = std::stod(argv[i]);
-					break;
-				case ARG_OUTPATH:
-					outPath = argv[i];
-					break;
-				case ARG_GPU:
-				case ARG_TIME_SERIES:
-				case ARG_USE_FLOAT:
-					settings[setting] = (argS == "t" || argS == "true" || argS == "T" || argS == "True" || argS == "TRUE" || argS == "y" || argS == "Y" || argS == "yes" || argS == "Yes" || argS == "YES" || argS == "1") ? 1 : 0;
-					break;
-				case ARG_METHOD:
-					if (argS == "tsNET" || argS == "tsnet" || argS == "TSNET") {
-						settings[setting] = METHOD_TSNET;
-					}
-					else if (argS == "tsNET*" || argS == "tsnet*" || argS == "TSNET*") {
-						settings[setting] = METHOD_TSNETSTAR;
-					}
-					else if (argS == "pmds" || argS == "PMDS" || argS == "Pmds" || argS == "PivotMDS" || argS == "pivotmds" || argS == "pivotMDS") {
-						settings[setting] = METHOD_PMDS;
-					}
-					else if (argS == "NNP-NET" || argS == "NNPNET" || argS == "nnp-net" || argS == "NNP-net" || argS == "nnp-NET" || argS == "nnpnet" || argS == "nnpNet" || argS == "nnpNET") {
-						settings[setting] = METHOD_NNPNET;
-					}
-					else {
-						std::cout << "Embedding method " << argv[i] << " not recognized, defaulting to NNP-NET. Use either:\nNNP-NET\nPMDS\ntsNET\ntsNET*\n\n";
-					}
-					break;
+			case ARG_SMOOTH:
+			case ARG_THETA:
+			case ARG_PERP:
+			case ARG_EMBEDDING_SIZE:
+			case ARG_SUBGRAPH_SIZE:
+			case ARG_DIMENSIONS:
+			case ARG_BATCH_SIZE:
+			case ARG_TRAINING_EPOCHS:
+			case ARG_PMDS_PIVOTS:
+				settings[setting] = std::stod(argv[i]);
+				break;
+			case ARG_OUTPATH:
+				outPath = argv[i];
+				break;
+			case ARG_GPU:
+			case ARG_TIME_SERIES:
+			case ARG_USE_FLOAT:
+				settings[setting] = (argS == "t" || argS == "true" || argS == "T" || argS == "True" || argS == "TRUE" || argS == "y" || argS == "Y" || argS == "yes" || argS == "Yes" || argS == "YES" || argS == "1") ? 1 : 0;
+				break;
+			case ARG_METHOD:
+				if (argS == "tsNET" || argS == "tsnet" || argS == "TSNET") {
+					settings[setting] = METHOD_TSNET;
+				}
+				else if (argS == "tsNET*" || argS == "tsnet*" || argS == "TSNET*") {
+					settings[setting] = METHOD_TSNETSTAR;
+				}
+				else if (argS == "pmds" || argS == "PMDS" || argS == "Pmds" || argS == "PivotMDS" || argS == "pivotmds" || argS == "pivotMDS") {
+					settings[setting] = METHOD_PMDS;
+				}
+				else if (argS == "NNP-NET" || argS == "NNPNET" || argS == "nnp-net" || argS == "NNP-net" || argS == "nnp-NET" || argS == "nnpnet" || argS == "nnpNet" || argS == "nnpNET") {
+					settings[setting] = METHOD_NNPNET;
+				}
+				else {
+					std::cout << "Embedding method " << argv[i] << " not recognized, defaulting to NNP-NET. Use either:\nNNP-NET\nPMDS\ntsNET\ntsNET*\n\n";
+				}
+				break;
 
 			}
-			
+
 		}
 	}
 
@@ -425,7 +431,7 @@ int main(int argc, char* argv[])
 		else {
 			createLayoutFor<double>(path, outPath, settings);
 		}
-		
+
 	}
 	else {
 		for (const auto& entry : fs::directory_iterator(path)) {
@@ -461,3 +467,268 @@ int main(int argc, char* argv[])
 
 	return 0;
 }
+
+
+// Python module functions
+
+static std::unordered_map<Argument, double> currentSettings;
+
+void init(int smoothing = 3,
+	double theta = 0.25,
+	bool gpu = false,
+	int perplexity = 40,
+	int embeddingSize = 50,
+	int subgraphSize = 10000,
+	int pmdsPivots = 250,
+	int outputDimensions = 2,
+	int batchSize = 64,
+	int trainingEpochs = 40) {
+	currentSettings[ARG_SMOOTH] = smoothing;
+	currentSettings[ARG_THETA] = theta;
+	currentSettings[ARG_GPU] = gpu;
+	currentSettings[ARG_PERP] = perplexity;
+	currentSettings[ARG_METHOD] = METHOD_NNPNET;
+	currentSettings[ARG_EMBEDDING_SIZE] = embeddingSize;
+	currentSettings[ARG_SUBGRAPH_SIZE] = subgraphSize;
+	currentSettings[ARG_PMDS_PIVOTS] = pmdsPivots;
+	currentSettings[ARG_DIMENSIONS] = outputDimensions;
+	currentSettings[ARG_BATCH_SIZE] = batchSize;
+	currentSettings[ARG_TRAINING_EPOCHS] = trainingEpochs;
+	currentSettings[ARG_USE_FLOAT] = 0; // We will always use doubles
+	currentSettings[ARG_TIME_SERIES] = false; // No time series
+};
+
+
+void run(std::string path, std::string outPath, int smoothing = 3,
+	double theta = 0.25,
+	bool gpu = false,
+	int perplexity = 40,
+	int method = METHOD_NNPNET,
+	int embeddingSize = 50,
+	int subgraphSize = 10000,
+	int pmdsPivots = 250,
+	int outputDimensions = 2,
+	int batchSize = 64,
+	int trainingEpochs = 40,
+	bool useFloat = true,
+	bool timeSeriesData = false) {
+	std::unordered_map<Argument, double> settings;
+	settings[ARG_SMOOTH] = smoothing;
+	settings[ARG_THETA] = theta;
+	settings[ARG_GPU] = gpu;
+	settings[ARG_PERP] = perplexity;
+	settings[ARG_METHOD] = method;
+	settings[ARG_EMBEDDING_SIZE] = embeddingSize;
+	settings[ARG_SUBGRAPH_SIZE] = subgraphSize;
+	settings[ARG_PMDS_PIVOTS] = pmdsPivots;
+	settings[ARG_DIMENSIONS] = outputDimensions;
+	settings[ARG_BATCH_SIZE] = batchSize;
+	settings[ARG_TRAINING_EPOCHS] = trainingEpochs;
+	settings[ARG_USE_FLOAT] = useFloat;
+	settings[ARG_TIME_SERIES] = timeSeriesData;
+
+	printSettings(settings);
+
+	if (path[path.size() - 4] == '.') {
+		if (outPath == "") {
+			outPath = path.substr(0, path.size() - 4) + "_out.vna";
+		}
+		if (!(outPath[outPath.size() - 3] == 'v' && outPath[outPath.size() - 2] == 'n' && outPath[outPath.size() - 1] == 'a')) {
+			outPath += ".vna";
+		}
+		if (settings[ARG_USE_FLOAT]) {
+			createLayoutFor<float>(path, outPath, settings);
+		}
+		else {
+			createLayoutFor<double>(path, outPath, settings);
+		}
+
+	}
+	else {
+		for (const auto& entry : fs::directory_iterator(path)) {
+			std::string p = entry.path().string();
+			auto splittedPath = Utils::split(p, '\\');
+			if (splittedPath.size() == 1) {
+				splittedPath = Utils::split(p, '/');
+			}
+			std::string fileName = splittedPath[splittedPath.size() - 1];
+
+			std::cout << "\nCurrent file: " << p << "\n";
+
+			std::string oPath;
+			if (outPath == "") {
+				oPath = p.substr(0, p.size() - 4) + "_out.vna";
+			}
+			else {
+				oPath = outPath;
+				if (oPath[oPath.size() - 1] != '\\' || oPath[oPath.size() - 1] != '/') {
+					oPath += '/';
+				}
+				oPath += fileName.substr(0, fileName.length() - 4) + ".vna";
+			}
+
+			if (settings[ARG_USE_FLOAT]) {
+				createLayoutFor<float>(p, oPath, settings);
+			}
+			else {
+				createLayoutFor<double>(p, oPath, settings);
+			}
+		}
+	}
+};
+
+
+Graph<double>* loadFile(std::string path) {
+	Graph<double>* g = new Graph<double>(currentSettings[ARG_DIMENSIONS]);
+	g->loadFromFile(path);
+	return g;
+};
+
+void saveFile(std::string path, Graph<double>* graph) {
+	graph->saveToVNA(path);
+};
+
+
+void createLayoutFor(Graph<double>* _g, std::unordered_map<Argument, double>& settings) {
+	printSettings(settings);
+	switch ((Method)(int)settings[ARG_METHOD]) {
+	case METHOD_NNPNET:
+	{
+		Graph<float> g(*_g);
+		NNPNET nnpnet;
+		nnpnet.perplexity = settings[ARG_PERP];
+		nnpnet.gpu = settings[ARG_GPU] > 0;
+		nnpnet.useFloats = settings[ARG_USE_FLOAT] > 0;
+		nnpnet.theta = settings[ARG_THETA];
+		nnpnet.subgraphPoints = settings[ARG_SUBGRAPH_SIZE];
+		nnpnet.pmdsPivots = settings[ARG_PMDS_PIVOTS];
+		nnpnet.trainingEpochs = settings[ARG_TRAINING_EPOCHS];
+		nnpnet.batchSize = settings[ARG_BATCH_SIZE];
+
+		g.fillNodeNames();
+		g.onlyConnectedFrom(0);
+		if (!g.checkFullyConnected()) {
+			std::cout << "Not fully connected\n";
+		}
+		TIME(nnpnet.run(g, nullptr, settings[ARG_EMBEDDING_SIZE]);
+		if (settings[ARG_SMOOTH] >= 1) {
+			SmoothingFunctions::Laplacian(g, settings[ARG_SMOOTH]);
+		}, "NNP-NET");
+
+		for (unsigned long long i = 0; i < _g->nodeCount * _g->outputDim; i++) {
+			_g->Y[i] = g.Y[i];
+		}
+
+	}
+	break;
+	case METHOD_PMDS:
+	{
+		PivotMDS<double> pmds;
+		pmds.setNumberOfPivots(settings[ARG_PMDS_PIVOTS]);
+		TIME(pmds.call(*_g), "PMDS");
+
+	}
+	break;
+	case METHOD_TSNET:
+	{
+		TSNET<double> tsnet;
+		tsnet.perp = settings[ARG_PERP];
+		TIME(tsnet.tsNET(*_g, settings[ARG_THETA]), "tsNET");
+	}
+	break;
+	case METHOD_TSNETSTAR:
+	{
+		TSNET<double> tsnet;
+		tsnet.perp = settings[ARG_PERP];
+		TIME(tsnet.tsNETStar(*_g, settings[ARG_THETA]), "tsNET*");
+	}
+	break;
+	}
+}
+
+void runNNPNET(Graph<double>* graph) {
+	currentSettings[ARG_METHOD] = METHOD_NNPNET;
+	createLayoutFor(graph, currentSettings);
+}
+void runPMDS(Graph<double>* graph) {
+	currentSettings[ARG_METHOD] = METHOD_PMDS;
+	createLayoutFor(graph, currentSettings);
+}
+void runTSNET(Graph<double>* graph) {
+	currentSettings[ARG_METHOD] = METHOD_TSNET;
+	createLayoutFor(graph, currentSettings);
+}
+void runTSNETSTAR(Graph<double>* graph) {
+	currentSettings[ARG_METHOD] = METHOD_TSNETSTAR;
+	createLayoutFor(graph, currentSettings);
+}
+
+int getNodeCount(Graph<double>* graph) {
+	return graph->nodeCount;
+}
+
+py::array_t<double> getEmbedding(Graph<double>* graph) {
+	return py::array_t<double>({ graph->nodeCount, graph->outputDim }, graph->Y);
+}
+
+std::vector<std::vector<Edge<double>>>* getEdges(Graph<double>* graph) {
+	return &graph->edges;
+}
+
+Graph<double>* initializeGraph(int nodeCount) {
+	return new Graph<double>(currentSettings[ARG_DIMENSIONS], nodeCount);
+};
+
+void addEdge(Graph<double>* graph, int a, int b, double weight) {
+	graph->edges[a].push_back(Edge<double>(b, weight));
+	graph->edges[b].push_back(Edge<double>(a, weight));
+};
+
+PYBIND11_MODULE(NNP_NET, m/*, py::mod_gil_not_used()*/) {
+	m.doc() = "This is the module docs.";
+
+	py::class_<Graph<double>>(m, "Graph");
+	py::class_<Edge<double>>(m, "Edge").def_readwrite("Other", &Edge<double>::other).def_readwrite("Weight", &Edge<double>::weight);
+
+	m.def("loadGraph", &loadFile, "path"_a);
+	m.def("saveGraph", &saveFile, "path"_a, "graph"_a);
+
+	m.def("initializeGraph", &initializeGraph, "nodeCount"_a);
+	m.def("addEdge", &addEdge, "graph"_a, "a"_a, "b"_a, "weight"_a = 1);
+
+	m.def("NNP_NET", &runNNPNET, "graph"_a);
+	m.def("PMDS", &runPMDS, "graph"_a);
+	m.def("tsNET", &runTSNET, "graph"_a);
+	m.def("tsNETStar", &runTSNETSTAR, "graph"_a);
+
+	m.def("getNodeCount", &getNodeCount, "graph"_a);
+	m.def("getEmbedding", &getEmbedding, "graph"_a);
+	m.def("getEdges", &getEdges, "graph"_a);
+	m.def("initialize", &init,
+		"smoothing"_a = 3,
+		"theta"_a = 0.25,
+		"gpu"_a = false,
+		"perplexity"_a = 40,
+		"embeddingSize"_a = 50,
+		"subgraphSize"_a = 10000,
+		"pmdsPivots"_a = 250,
+		"outputDimensions"_a = 2,
+		"batchSize"_a = 64,
+		"trainingEpochs"_a = 40);
+	m.def("runAll", &run,
+		"path"_a,
+		"outPath"_a = "",
+		"smoothing"_a = 3,
+		"theta"_a = 0.25,
+		"gpu"_a = false,
+		"perplexity"_a = 40,
+		"method"_a = 0,
+		"embeddingSize"_a = 50,
+		"subgraphSize"_a = 10000,
+		"pmdsPivots"_a = 250,
+		"outputDimensions"_a = 2,
+		"batchSize"_a = 64,
+		"trainingEpochs"_a = 40,
+		"useFloat"_a = true,
+		"timeSeriesData"_a = false);
+};

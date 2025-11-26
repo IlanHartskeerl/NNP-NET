@@ -540,18 +540,19 @@ static float* _fullEmbedding = nullptr;
 static float* _smallEmbedding = nullptr;
 static bool first = true;
 static void* loc = nullptr;
+static int _embeddingDim;
 
-PYBIND11_EMBEDDED_MODULE(getLists, m) {
-	m.def("getSmallEmbedding", [](size_t smallEmbeddingSize, size_t embeddingDim) {
-		return py::array_t<float>({ smallEmbeddingSize, embeddingDim }, _smallEmbedding);
-		});
-	m.def("getGt", [](size_t smallEmbeddingSize, size_t outputDim) {
-		return py::array_t<float>({ smallEmbeddingSize, outputDim }, _gt);
-		});
-	m.def("getFullEmbedding", [](size_t fullEmbeddingSize, size_t embeddingDim) {
-		return py::array_t<float>({ fullEmbeddingSize, embeddingDim }, _fullEmbedding);
-		});
-}
+// PYBIND11_EMBEDDED_MODULE(getLists, m) {
+// 	m.def("getSmallEmbedding", [](size_t smallEmbeddingSize, size_t embeddingDim) {
+// 		return py::array_t<float>({ smallEmbeddingSize, embeddingDim }, _smallEmbedding);
+// 		});
+// 	m.def("getGt", [](size_t smallEmbeddingSize, size_t outputDim) {
+// 		return py::array_t<float>({ smallEmbeddingSize, outputDim }, _gt);
+// 		});
+// 	m.def("getFullEmbedding", [](size_t fullEmbeddingSize, size_t embeddingDim) {
+// 		return py::array_t<float>({ fullEmbeddingSize, embeddingDim }, _fullEmbedding);
+// 		});
+// }
 
 void NNPNet::NNPNET::trainPlusInfer(float* smallEmbedding, int smallEmbeddingSize, double* gt, float* fullEmbedding, int fullEmbeddingSize, int embeddingDim, int outputDim, float* Y)
 {
@@ -562,6 +563,7 @@ void NNPNet::NNPNET::trainPlusInfer(float* smallEmbedding, int smallEmbeddingSiz
 	_gt = fgt;
 	_fullEmbedding = fullEmbedding;
 	_smallEmbedding = smallEmbedding;
+	_embeddingDim = embeddingDim;
 	// Else the loss function gives an error
 	smallEmbeddingSize -= (smallEmbeddingSize%64);
 
@@ -573,9 +575,13 @@ void NNPNet::NNPNET::trainPlusInfer(float* smallEmbedding, int smallEmbeddingSiz
 		"embeddingDim"_a = embeddingDim,
 		"trainEpochs"_a = trainingEpochs,
 		"batchSize"_a = batchSize,
-		"outputDim"_a = outputDim
+		"outputDim"_a = outputDim,
+		"smallEmbedding"_a = py::array_t<float>({ smallEmbeddingSize, embeddingDim }, _smallEmbedding),
+		"gt"_a = py::array_t<float>({ smallEmbeddingSize, outputDim }, _gt),
+		"fullEmbedding"_a = py::array_t<float>({ fullEmbeddingSize, embeddingDim }, _fullEmbedding)
 		);
 	loc = l;
+	
 
 	py::exec(R"(
 import keras
@@ -585,8 +591,6 @@ import tensorflow as tf
  + (gpu ? std::string() : std::string("tf.config.set_visible_devices([], 'GPU')\n")) + 
 R"(import numpy as np
 print("Imported standard")
-
-import getLists
 
 model = tf.keras.Sequential([
     tf.keras.layers.InputLayer(input_shape=[embeddingDim], batch_size=batchSize),
@@ -598,9 +602,9 @@ model = tf.keras.Sequential([
 model.compile(optimizer='Adam',
               loss=tf.keras.losses.MeanSquaredError())
     
-model.fit(getLists.getSmallEmbedding(smallEmbeddingSize, embeddingDim), getLists.getGt(smallEmbeddingSize, outputDim), epochs=trainEpochs, batch_size=batchSize)
+model.fit(smallEmbedding, gt, epochs=trainEpochs, batch_size=batchSize)
     
-outPredictions = model.predict(getLists.getFullEmbedding(fullEmbeddingSize, embeddingDim), batch_size=4096)
+outPredictions = model.predict(fullEmbedding, batch_size=4096)
 )", py::globals(), (*(py::dict*)loc));
 
 	float* out = (float*)(*(py::dict*)loc)["outPredictions"].cast<py::array>().data();
@@ -615,8 +619,9 @@ void NNPNet::NNPNET::infer(float* fullEmbedding, int fullEmbeddingSize, int outp
 {
 	_fullEmbedding = fullEmbedding;
 	(*(py::dict*)loc)["fullEmbeddingSize"] = fullEmbeddingSize;
+	(*(py::dict*)loc)["fullEmbedding"] = py::array_t<float>({ fullEmbeddingSize, _embeddingDim }, _fullEmbedding);
 	py::exec(R"(
-outPredictions = model.predict(getLists.getFullEmbedding(fullEmbeddingSize, embeddingDim), batch_size=4096)
+outPredictions = model.predict(fullEmbedding, batch_size=4096)
 )", py::globals(), (*(py::dict*)loc));
 	float* out = (float*)(*(py::dict*)loc)["outPredictions"].cast<py::array>().data();
 
