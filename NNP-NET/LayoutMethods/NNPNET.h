@@ -17,6 +17,7 @@ namespace NNPNet {
 		bool pmdsEmbedding = true, fastSubgraph = true, gpu = false, useFloats = true;
 
 		double theta = 0.25;
+		double featureWeight = 0;
 
 	private:
 		float* createPivotEmbedding(Graph<float>& g, int pivots);
@@ -31,6 +32,9 @@ namespace NNPNet {
 
 		void trainNetwork(Graph<float>& g, Graph<double>* GT, float* embedding, int embeddingDim);
 	
+		void multivariteSubgraph(Graph<float>& g, Graph<float>& subG, std::vector<int>& nodes);
+		void addMultivariateInformation(float* fullEmbeddingIn, float** fullEmbeddingOut, float* smallEmbeddingIn, float** smallEmbeddingOut, Graph<float>& g, std::vector<int>& nodesSubgraph, int& embeddingDim);
+
 		void trainPlusInfer(float* smallEmbedding, int smallEmbeddingSize, double* gt, float* fullEmbedding, int fullEmbeddingSize, int embeddingDim, int outputDim, float* Y);
 		void infer(float* fullEmbedding, int fullEmbeddingSize, int outputDim, float* Y);
 

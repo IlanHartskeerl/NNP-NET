@@ -12,6 +12,8 @@
 
 #include "Utils.h"
 
+#define SIMD_FEATURE_CALC
+
 namespace NNPNet {
 
 	template<typename T>
@@ -47,6 +49,13 @@ namespace NNPNet {
 			outputDim = g.outputDim;
 			weighted = g.weighted;
 			edges.resize(g.edges.size());
+
+			featureDimensions = g.featureDimensions;
+			if (featureDimensions > 0) {
+				features = (float*)malloc(sizeof(float) * featureDimensions * nodeCount);
+				memcpy(features, g.features, sizeof(float) * featureDimensions * nodeCount);
+			}
+
 			int i = 0;
 			for (auto& es : g.edges) {
 				for (auto e : es) {
@@ -66,6 +75,9 @@ namespace NNPNet {
 
 		~Graph() {
 			free(Y);
+			if (features != nullptr) {
+				free(features);
+			}
 		}
 
 		void gridGraph(int size) {
@@ -283,6 +295,64 @@ namespace NNPNet {
 
 		};
 
+		void addFeaturesToDistances(int source, T featureWeight, T* distances) {
+			if (featureWeight <= 0 || featureDimensions == 0) return;
+			T* featureDistances = (T*)malloc(nodeCount * sizeof(T));
+			T maxDist = 0;
+			T maxFeat = 0;
+			for (int i = 0; i < nodeCount; i++) {
+				featureDistances[i] = calcFeatureEuclidianDistance(source, i);
+				if (maxFeat < featureDistances[i]) maxFeat = featureDistances[i];
+				if (maxDist < distances[i]) maxDist = distances[i];
+			}
+			if (featureWeight >= 1) {
+				for (int i = 0; i < nodeCount; i++) {
+					distances[i] = featureDistances[i] / maxFeat;
+				}
+			}
+			else {
+				for (int i = 0; i < nodeCount; i++) {
+					distances[i] = featureWeight * featureDistances[i] / maxFeat +
+						(1 - featureWeight) * distances[i] / maxDist;
+				}
+			}
+			free(featureDistances);
+		};
+
+		T calcFeatureManhattanDistance(int a, int b) {
+			T res = 0;
+			for (int i = 0; i < featureDimensions; i++) {
+				res += abs(features[a * featureDimensions + i] - features[b * featureDimensions + i]);
+			}
+			return res / featureDimensions;
+		};
+
+		T calcFeatureEuclidianDistance(int a, int b) {
+#ifdef SIMD_FEATURE_CALC
+			__m256 current;
+			__m256 temp;
+			current = _mm256_xor_ps(current, current);
+
+			__m256* _a = (__m256*)(void*)(features + featureDimensions * a);
+			__m256* _b = (__m256*)(void*)(features + featureDimensions * b);
+			int start = 0;
+			for (int start = 0; start < featureDimensions - 7; start += 8) {
+				temp = _mm256_sub_ps(_a[start], _b[start]);
+				_mm256_add_ps(current, _mm256_mul_ps(temp, temp));
+			}
+			float* _t = (float*)(void*) & current;
+			T res = _t[0] + _t[1] + _t[2] + _t[3] + _t[4] + _t[5] + _t[6] + _t[7];
+#else
+			T res = 0;
+			int start = 0;
+#endif
+			for (int i = start; i < featureDimensions; i++) {
+				T temp = features[a * featureDimensions + i] - features[b * featureDimensions + i];
+				res += temp*temp;
+			}
+			return res;
+		};
+
 		void loadFromFile(std::string path) {
 			if (path[path.size() - 3] == 'm' && path[path.size() - 2] == 't' && path[path.size() - 1] == 'x') {
 				loadFromMTX(path);
@@ -295,6 +365,9 @@ namespace NNPNet {
 			}
 			else if (path[path.size() - 3] == 't' && path[path.size() - 2] == 'x' && path[path.size() - 1] == 't') {
 				loadFromTXT(path);
+			}
+			else if (path[path.size() - 3] == 't' && path[path.size() - 2] == 'a' && path[path.size() - 1] == 'b') {
+				loadFromTAB(path);
 			}
 			else {
 				std::cout << "File does not have a extention that is supported\nProvide either a .mtx, .vna or .dot file file\n";
@@ -501,6 +574,77 @@ namespace NNPNet {
 			Y = (T*)malloc(nodeCount * outputDim * sizeof(T));
 		}
 
+		void loadFromTAB(std::string path) {
+			std::string pathNode = path.substr(0, path.length() - 3) + "NODE.tab";
+			std::string pathEdges = path.substr(0, path.length() - 3) + "EDGES.tab";
+
+			// Parse nodes -----------------------------------------------
+			
+			std::ifstream infile(pathNode);
+			std::string line;
+
+			// Header
+			std::getline(infile, line);
+			std::unordered_map<std::string, int> featureToId;
+			{
+				auto header = Utils::split(line, ' ');
+				featureDimensions = 0;
+				nodeCount = std::stoi(header[1]);
+				for (int i = 2; i < header.size(); i++) {
+					auto splitted = Utils::split(header[i], ':');
+					if (splitted[0] == "numeric") {
+						featureToId[splitted[1]] = featureDimensions++;
+					}
+				}
+			}
+			
+			features = (float*)calloc(featureDimensions * nodeCount, sizeof(float));
+
+			// Lines
+			namesToId.clear();
+			nodeNames.clear();
+			int at = 0;
+			while (std::getline(infile, line))
+			{
+				if (line.size() < 2) continue;
+				auto splitted = Utils::split(line, ' ');
+
+				namesToId[std::stoi(splitted[0])] = at;
+				nodeNames.push_back(std::stoi(splitted[0]));
+				// Features
+				for (int i = 2; i < splitted.size(); i++) {
+					auto feat = Utils::split(splitted[i], '=');
+					if (feat.size() == 2 && featureToId.count(feat[0]) > 0) {
+						features[at * featureDimensions + featureToId[feat[0]]] = std::stof(feat[1]);
+					}
+				}
+
+				at++;
+			}
+			infile.close();
+
+			// Parse Edges ----------------------------------------
+			std::ifstream edgefile(pathEdges);
+			edges.resize(nodeCount);
+
+			while (std::getline(edgefile, line))
+			{
+				auto split = Utils::split(line, ' ');
+				int a = namesToId[std::stoi(split[0])];
+				int b = namesToId[std::stoi(split[1])];
+
+				edges[a].push_back(Edge<T>(b, 1));
+				edges[b].push_back(Edge<T>(a, 1));
+			}
+
+			weighted = false;
+			Y = (T*)malloc(nodeCount * outputDim * sizeof(T));
+
+			if (featureDimensions > 0) {
+				normalizeFeaturesPerAttr();
+			}
+		};
+
 		void loadTimeSeries(std::string path, bool onlyAdds = false) {
 			std::ifstream infile(path);
 
@@ -660,6 +804,15 @@ namespace NNPNet {
 			}
 		}
 
+		void knnWithFeatures(int source, int* nodes, T* distances, int k, T featureWeight) {
+			
+			T* d = (T*)malloc(nodeCount * sizeof(T));
+			getDistances(source, d);
+			addFeaturesToDistances(source, featureWeight, d);
+			selectKDistances(d, nodes, k, source, distances);
+			free(d);
+		};
+
 
 		void saveToVNA(std::string path) {
 			if (nodeNames.size() == 0) {
@@ -758,6 +911,40 @@ namespace NNPNet {
 			}
 		}
 
+		void normalizeFeatures() {
+			float min = 9999999999;
+			float max = -9999999999;
+			for (int i = 0; i < nodeCount * featureDimensions; i++) {
+				if (features[i] > max) max = features[i];
+				if (features[i] < min) min = features[i];
+			}
+			float dif = max - min;
+			for (int i = 0; i < nodeCount * featureDimensions; i++) {
+				features[i] = (features[i] - min) / (dif);
+			}
+		}
+
+		void normalizeFeaturesPerAttr() {
+			float* min = (float*)malloc(featureDimensions * sizeof(float));
+			float* max = (float*)malloc(featureDimensions * sizeof(float));
+
+			for (int i = 0; i < featureDimensions; i++) {
+				min[i] = 9999999999;
+				max[i] = -9999999999;
+			}
+
+			for (int i = 0; i < nodeCount * featureDimensions; i++) {
+				if (features[i] > max[i%featureDimensions]) max[i % featureDimensions] = features[i];
+				if (features[i] < min[i % featureDimensions]) min[i % featureDimensions] = features[i];
+			}
+
+			for (int i = 0; i < nodeCount * featureDimensions; i++) {
+				features[i] = (features[i] - min[i % featureDimensions]) / (max[i % featureDimensions] - min[i % featureDimensions] + 0.000001);
+			}
+			free(min);
+			free(max);
+		}
+
 		int nodeCount = -1, outputDim;
 		std::vector<std::vector<Edge<T>>> edges;
 		std::vector<int> nodeNames;
@@ -767,6 +954,72 @@ namespace NNPNet {
 
 		bool weighted = false;
 
+
+		int featureDimensions = 0;
+		float* features = nullptr;
+
+
+	private:
+		void selectKDistances(T* distances, int* nodes, int k, int source, T* outDist) {
+			std::vector<std::pair<int, int>> list;
+			std::vector<std::pair<int, int>> list2;
+			list.reserve(nodeCount - 1);
+			list2.resize(nodeCount - 1);
+
+			for (int i = 0; i < nodeCount; i++) {
+				if (i == source) continue;
+				// Distances should be normalized bewteen 0 and 1
+				list.push_back({ (int)(distances[i] * 2147483640.0), i });
+			}
+
+			// Radix sort
+			int counts[256];
+			for (int i = 0; i < 2; i++) {
+				// Reset counts
+				for (int j = 0; j < 256; j++) counts[j] = 0;
+				// Count
+				int off = i * 2;
+				for (int j = 0; j < nodeCount - 1; j++) {
+					counts[*((unsigned char*)(list.data() + j) + off)]++;
+				}
+				// Set offsets
+				int curr = 0;
+				for (int j = 0; j < 256; j++) {
+					int next = curr + counts[j];
+					counts[j] = curr;
+					curr = next;
+				}
+				// Move into new list
+				for (int j = 0; j < nodeCount - 1; j++) {
+					list2[counts[*((unsigned char*)(list.data() + j) + off)]++] = list[j];
+				}
+
+				// Again, but from list2 -> list
+				// Reset counts
+				for (int j = 0; j < 256; j++) counts[j] = 0;
+				// Count
+				off = i * 2 + 1;
+				for (int j = 0; j < nodeCount - 1; j++) {
+					counts[*((unsigned char*)(list2.data() + j) + off)]++;
+				}
+				// Set offsets
+				curr = 0;
+				for (int j = 0; j < 256; j++) {
+					int next = curr + counts[j];
+					counts[j] = curr;
+					curr = next;
+				}
+				// Move into new list
+				for (int j = 0; j < nodeCount - 1; j++) {
+					list[counts[*((unsigned char*)(list2.data() + j) + off)]++] = list2[j];
+				}
+			}
+
+			for (int i = 0; i < k; i++) {
+				nodes[i] = list[i].second;
+				outDist[i] = distances[i];
+			}
+		}
 	};
 
 };

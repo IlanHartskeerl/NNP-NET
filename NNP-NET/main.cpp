@@ -20,6 +20,8 @@ namespace fs = std::filesystem;
 #include "Utils.h"
 #include "Smoothing.h"
 #include "Threading.h"
+#include "Stress.h"
+#include "NeighborhoodPreservation.h"
 
 using namespace NNPNet;
 
@@ -48,6 +50,10 @@ enum Argument {
 	ARG_BATCH_SIZE,
 	ARG_USE_FLOAT,
 	ARG_TIME_SERIES,
+	ARG_FEATURE_WEIGHT,
+	ARG_CALC_STRESS,
+	ARG_CALC_FEATURE_STRESS,
+	ARG_CALC_NP,
 
 	ARG_none
 };
@@ -85,8 +91,36 @@ std::unordered_map<std::string, Argument> argMap = {
 	{"--use_float", ARG_USE_FLOAT},
 	{"-f", ARG_USE_FLOAT},
 	{"--time_series", ARG_TIME_SERIES},
+	{"--feature_weight", ARG_FEATURE_WEIGHT},
+	{"--stress", ARG_CALC_STRESS},
+	{"--feature_stress", ARG_CALC_FEATURE_STRESS},
+	{"--np", ARG_CALC_NP},
 };
 
+
+void calculateMetrics(Graph<float>& g, std::unordered_map<Argument, double>& settings) {
+	if (settings[ARG_CALC_FEATURE_STRESS] > 0) {
+		CalcStress::CalcFeatureStress(g);
+	}
+	if (settings[ARG_CALC_STRESS] > 0) {
+		CalcStress::Calc(g);
+	}
+	if (settings[ARG_CALC_NP] > 0) {
+		NP::np(g);
+	}
+}
+
+void calculateMetrics(Graph<double>& g, std::unordered_map<Argument, double>& settings) {
+	if (settings[ARG_CALC_FEATURE_STRESS] > 0) {
+		CalcStress::CalcFeatureStress(Graph<float>(g));
+	}
+	if (settings[ARG_CALC_STRESS] > 0) {
+		CalcStress::Calc(Graph<float>(g));
+	}
+	if (settings[ARG_CALC_NP] > 0) {
+		NP::np(g);
+	}
+}
 
 template<class T>
 void createLayoutFor(std::string path, std::string outPath, std::unordered_map<Argument, double>& settings) {
@@ -103,6 +137,7 @@ void createLayoutFor(std::string path, std::string outPath, std::unordered_map<A
 		nnpnet.pmdsPivots = settings[ARG_PMDS_PIVOTS];
 		nnpnet.trainingEpochs = settings[ARG_TRAINING_EPOCHS];
 		nnpnet.batchSize = settings[ARG_BATCH_SIZE];
+		nnpnet.featureWeight = settings[ARG_FEATURE_WEIGHT];
 
 		if (settings[ARG_TIME_SERIES]) {
 			g.loadFromFile(path);
@@ -143,6 +178,7 @@ void createLayoutFor(std::string path, std::string outPath, std::unordered_map<A
 				}, "NNP-NET");
 				std::cout << "Saving to " << outPath << "\n";
 				_g.saveToVNA(outPath);
+				calculateMetrics(_g, settings);
 			}
 
 			int i = 1;
@@ -159,6 +195,7 @@ void createLayoutFor(std::string path, std::string outPath, std::unordered_map<A
 					}, "NNP-NET");
 					std::cout << "Saving to " << outPath << "\n";
 					_g.saveToVNA(outPath.substr(0, outPath.size() - 4) + std::to_string(i) + ".vna");
+					calculateMetrics(_g, settings);
 				}
 
 				i++;
@@ -180,6 +217,8 @@ void createLayoutFor(std::string path, std::string outPath, std::unordered_map<A
 			}, "NNP-NET");
 			std::cout << "Saving to " << outPath << "\n";
 			g.saveToVNA(outPath);
+
+			calculateMetrics(g, settings);
 		}
 
 	}
@@ -225,6 +264,7 @@ void createLayoutFor(std::string path, std::string outPath, std::unordered_map<A
 				TIME(pmds.call(_g, pivotPoints), "PMDS");
 				std::cout << "Saving to " << outPath << "\n";
 				_g.saveToVNA(outPath);
+				calculateMetrics(_g, settings);
 			}
 
 			int i = 1;
@@ -239,6 +279,7 @@ void createLayoutFor(std::string path, std::string outPath, std::unordered_map<A
 				TIME(pmds.call(_g, pivotPoints), "PMDS");
 				std::cout << "Saving to " << outPath << "\n";
 				_g.saveToVNA(outPath.substr(0, outPath.size() - 4) + std::to_string(i) + ".vna");
+				calculateMetrics(_g, settings);
 
 				i++;
 				tsdPath = path.substr(0, path.size() - 4) + std::to_string(i) + ".tsd";
@@ -255,6 +296,7 @@ void createLayoutFor(std::string path, std::string outPath, std::unordered_map<A
 			TIME(pmds.call(g), "PMDS");
 			std::cout << "Saving to " << outPath << "\n";
 			g.saveToVNA(outPath);
+			calculateMetrics(g, settings);
 		}
 	}
 	break;
@@ -264,9 +306,11 @@ void createLayoutFor(std::string path, std::string outPath, std::unordered_map<A
 		g.loadFromFile(path);
 		TSNET<double> tsnet;
 		tsnet.perp = settings[ARG_PERP];
+		tsnet.featureWeight = settings[ARG_FEATURE_WEIGHT];
 		TIME(tsnet.tsNET(g, settings[ARG_THETA]), "tsNET");
 		std::cout << "Saving to " << outPath << "\n";
 		g.saveToVNA(outPath);
+		calculateMetrics(g, settings);
 	}
 	break;
 	case METHOD_TSNETSTAR:
@@ -275,9 +319,11 @@ void createLayoutFor(std::string path, std::string outPath, std::unordered_map<A
 		g.loadFromFile(path);
 		TSNET<double> tsnet;
 		tsnet.perp = settings[ARG_PERP];
+		tsnet.featureWeight = settings[ARG_FEATURE_WEIGHT];
 		TIME(tsnet.tsNETStar(g, settings[ARG_THETA]), "tsNET*");
 		std::cout << "Saving to " << outPath << "\n";
 		g.saveToVNA(outPath);
+		calculateMetrics(g, settings);
 	}
 	break;
 	}
@@ -290,12 +336,14 @@ void printSettings(std::unordered_map<Argument, double>& settings) {
 	case METHOD_TSNET: std::cout << "tsNET\n";
 		std::cout << "tsNET* settings: \n"
 			<< "\tPerplexity: " << settings[ARG_PERP] << "\n"
-			<< "\tTheta: " << settings[ARG_THETA] << "\n";
+			<< "\tTheta: " << settings[ARG_THETA] << "\n"
+			<< "\tMultivariate Feature Weight: " << settings[ARG_FEATURE_WEIGHT] << "\n";
 		break;
 	case METHOD_TSNETSTAR: std::cout << "tsNET*\n";
 		std::cout << "tsNET* settings: \n"
 			<< "\tPerplexity: " << settings[ARG_PERP] << "\n"
-			<< "\tTheta: " << settings[ARG_THETA] << "\n";
+			<< "\tTheta: " << settings[ARG_THETA] << "\n"
+			<< "\tMultivariate Feature Weight: " << settings[ARG_FEATURE_WEIGHT] << "\n";
 		break;
 	case METHOD_NNPNET: std::cout << "NNP-NET\n";
 		std::cout << "NNP-NET settings: \n"
@@ -309,7 +357,8 @@ void printSettings(std::unordered_map<Argument, double>& settings) {
 			<< "\tTraining epochs: " << settings[ARG_TRAINING_EPOCHS] << "\n"
 			<< "\tUses gpu: " << (settings[ARG_GPU] == 0 ? "No" : "Yes") << "\n"
 			<< "\tUses float precision: " << (settings[ARG_USE_FLOAT] == 0 ? "Double" : "Float") << "\n"
-			<< "\tTime series data: " << (settings[ARG_TIME_SERIES] == 0 ? "No" : "Yes") << "\n";
+			<< "\tTime series data: " << (settings[ARG_TIME_SERIES] == 0 ? "No" : "Yes") << "\n"
+			<< "\tMultivariate Feature Weight: " << settings[ARG_FEATURE_WEIGHT] << "\n";
 
 		break;
 	case METHOD_PMDS: std::cout << "PMDS\n";
@@ -320,6 +369,11 @@ void printSettings(std::unordered_map<Argument, double>& settings) {
 		break;
 	}
 
+
+	std::cout << "\nCalculate Metrics:\n" <<
+		"\tStress: " << (settings[ARG_CALC_STRESS] == 0 ? "No\n" : "Yes\n") <<
+		"\tFeature Stress: " << (settings[ARG_CALC_FEATURE_STRESS] == 0 ? "No\n" : "Yes\n") <<
+		"\tNeighborhood preservation: " << (settings[ARG_CALC_NP] == 0 ? "No\n\n" : "Yes\n\n");
 }
 
 int main(int argc, char* argv[])
@@ -331,7 +385,7 @@ int main(int argc, char* argv[])
 	std::string outPath;
 
 	std::unordered_map<Argument, double> settings;
-	settings[ARG_SMOOTH] = 3;
+	settings[ARG_SMOOTH] = 0;
 	settings[ARG_THETA] = 0.25;
 	settings[ARG_GPU] = 0;
 	settings[ARG_PERP] = 40;
@@ -344,6 +398,10 @@ int main(int argc, char* argv[])
 	settings[ARG_TRAINING_EPOCHS] = 40;
 	settings[ARG_USE_FLOAT] = 0;
 	settings[ARG_TIME_SERIES] = 0;
+	settings[ARG_FEATURE_WEIGHT] = 0.5;
+	settings[ARG_CALC_FEATURE_STRESS] = false;
+	settings[ARG_CALC_STRESS] = false;
+	settings[ARG_CALC_NP] = false;
 
 
 	if (argc == 1) {
@@ -383,6 +441,7 @@ int main(int argc, char* argv[])
 			case ARG_BATCH_SIZE:
 			case ARG_TRAINING_EPOCHS:
 			case ARG_PMDS_PIVOTS:
+			case ARG_FEATURE_WEIGHT:
 				settings[setting] = std::stod(argv[i]);
 				break;
 			case ARG_OUTPATH:
@@ -391,6 +450,9 @@ int main(int argc, char* argv[])
 			case ARG_GPU:
 			case ARG_TIME_SERIES:
 			case ARG_USE_FLOAT:
+			case ARG_CALC_STRESS:
+			case ARG_CALC_FEATURE_STRESS:
+			case ARG_CALC_NP:
 				settings[setting] = (argS == "t" || argS == "true" || argS == "T" || argS == "True" || argS == "TRUE" || argS == "y" || argS == "Y" || argS == "yes" || argS == "Yes" || argS == "YES" || argS == "1") ? 1 : 0;
 				break;
 			case ARG_METHOD:
@@ -441,12 +503,12 @@ int main(int argc, char* argv[])
 				splittedPath = Utils::split(p, '/');
 			}
 			std::string fileName = splittedPath[splittedPath.size() - 1];
-
+			
 			std::cout << "\nCurrent file: " << p << "\n";
 
 			std::string oPath;
 			if (outPath == "") {
-				oPath = p.substr(0, p.size() - 4) + "_out.vna";
+				oPath = p.substr(0, p.size() - 4) + "_out_w" + std::to_string(settings[ARG_FEATURE_WEIGHT]) + ".vna";
 			}
 			else {
 				oPath = outPath;

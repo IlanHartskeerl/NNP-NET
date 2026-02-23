@@ -505,12 +505,16 @@ void NNPNet::NNPNET::trainNetwork(Graph<float>& g, Graph<double>* GT, float* emb
 		else {
 			TIME(createSubnetwork(g, subG, nodes), "Create subgraph");
 		}
+		multivariteSubgraph(g, subG, nodes);
+
 		TSNET<double> tsnet;
 		tsnet.perp = perplexity;
+		tsnet.featureWeight = featureWeight;
 		Graph<double> subD(subG);
 		TIME(tsnet.tsNETStar(subD, theta), "creating ground truth");
 
 		subD.normalize();
+		//subD.saveToVNA("GT" + std::to_string(featureWeight) + ".vna");
 	
 		// Convert to output labels
 		float* smallEmbedding = (float*)malloc(subG.nodeCount * embeddingDim * sizeof(float));
@@ -520,19 +524,75 @@ void NNPNet::NNPNET::trainNetwork(Graph<float>& g, Graph<double>* GT, float* emb
 			}
 		}
 
-		TIME(trainPlusInfer(smallEmbedding, subG.nodeCount, subD.Y, embedding, g.nodeCount, embeddingDim, g.outputDim, g.Y), "Train and Inference");
+		if (featureWeight > 0 && g.featureDimensions > 0) {
+			float* _fullEmbedding, * _smallEmbedding;
+			addMultivariateInformation(embedding, &_fullEmbedding, smallEmbedding, &_smallEmbedding, g, nodes, embeddingDim);
+			TIME(trainPlusInfer(_smallEmbedding, subG.nodeCount, subD.Y, _fullEmbedding, g.nodeCount, embeddingDim, g.outputDim, g.Y), "Train and Inference");
+			free(_fullEmbedding);
+			free(_smallEmbedding);
+		}
+		else {
+			TIME(trainPlusInfer(smallEmbedding, subG.nodeCount, subD.Y, embedding, g.nodeCount, embeddingDim, g.outputDim, g.Y), "Train and Inference");
+		}
 		free(smallEmbedding);
 	}
 	else {
 		TSNET<double> tsnet;
 		tsnet.perp = perplexity;
+		tsnet.featureWeight = featureWeight;
 		Graph<double> gd(g);
 		TIME(tsnet.tsNETStar(gd, theta), "creating ground truth");
 		gd.normalize();
+		//gd.saveToVNA("GT" + std::to_string(featureWeight) + ".vna");
 
 		// Convert to output labels
-		TIME(trainPlusInfer(embedding, g.nodeCount, gd.Y, embedding, g.nodeCount, embeddingDim, g.outputDim, g.Y), "Train and Inference");
+		if (featureWeight > 0 && g.featureDimensions > 0) {
+			float* _fullEmbedding;
+			addMultivariateInformation(embedding, &_fullEmbedding, nullptr, nullptr, g, nodes, embeddingDim);
+			TIME(trainPlusInfer(_fullEmbedding, g.nodeCount, gd.Y, _fullEmbedding, g.nodeCount, embeddingDim, g.outputDim, g.Y), "Train and Inference");
+			free(_fullEmbedding);
+		}
+		else {
+			TIME(trainPlusInfer(embedding, g.nodeCount, gd.Y, embedding, g.nodeCount, embeddingDim, g.outputDim, g.Y), "Train and Inference");
+		}
 	}
+}
+
+void NNPNet::NNPNET::multivariteSubgraph(Graph<float>& g, Graph<float>& subG, std::vector<int>& nodes)
+{
+	if (featureWeight <= 0 || g.featureDimensions <= 0) return;
+
+	subG.features = (float*)malloc(g.featureDimensions * subG.nodeCount * sizeof(float));
+	subG.featureDimensions = g.featureDimensions;
+	for (int i = 0; i < subG.nodeCount; i++) {
+		memcpy(subG.features + (i * g.featureDimensions), g.features + (nodes[i] * g.featureDimensions), sizeof(float) * g.featureDimensions);
+	}
+}
+
+void NNPNet::NNPNET::addMultivariateInformation(float* fullEmbeddingIn, float** fullEmbeddingOut, float* smallEmbeddingIn, float** smallEmbeddingOut, Graph<float>& g, std::vector<int>& nodesSubgraph, int& embeddingDim)
+{
+	if (g.featureDimensions == 0) {
+		(*fullEmbeddingOut) = fullEmbeddingIn;
+		(*smallEmbeddingOut) = smallEmbeddingIn;
+		return;
+	}
+
+	int newEmbeddingSize = embeddingDim + g.featureDimensions;
+	(*fullEmbeddingOut) = (float*)malloc(sizeof(float) * newEmbeddingSize * g.nodeCount);
+
+	for (int i = 0; i < g.nodeCount; i++) {
+		memcpy(*fullEmbeddingOut + (i * newEmbeddingSize), fullEmbeddingIn + (i * embeddingDim), sizeof(float) * embeddingDim);
+		memcpy(*fullEmbeddingOut + (i * newEmbeddingSize + embeddingDim), g.features + (i * g.featureDimensions), sizeof(float) * g.featureDimensions);
+	}
+	if (smallEmbeddingIn != nullptr) {
+		(*smallEmbeddingOut) = (float*)malloc(sizeof(float) * newEmbeddingSize * nodesSubgraph.size());
+		for (int i = 0; i < nodesSubgraph.size(); i++) {
+			memcpy(*smallEmbeddingOut + (i * newEmbeddingSize), smallEmbeddingIn + (i * embeddingDim), sizeof(float) * embeddingDim);
+			memcpy(*smallEmbeddingOut + (i * newEmbeddingSize + embeddingDim), g.features + (nodesSubgraph[i] * g.featureDimensions), sizeof(float) * g.featureDimensions);
+		}
+	}
+
+	embeddingDim = newEmbeddingSize;
 }
 
 static float* _gt = nullptr;
@@ -590,7 +650,6 @@ import tensorflow as tf
 )"
  + (gpu ? std::string() : std::string("tf.config.set_visible_devices([], 'GPU')\n")) + 
 R"(import numpy as np
-print("Imported standard")
 
 model = tf.keras.Sequential([
     tf.keras.layers.InputLayer(input_shape=[embeddingDim], batch_size=batchSize),

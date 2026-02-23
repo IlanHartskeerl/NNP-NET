@@ -49,9 +49,19 @@ Supported input file types are .vna, .mtx and .dot. Output will always be done t
 | --training_epochs |  | Training epochs used for training NNP as part of NNP-NET | 40 |
 | --use_float | -f | Uses float instead of doubles for PMDS. Only effects PMDS calls. Doubles might be needed for very large graphs | True |
 | --time_series |  | Loads time series data and uses stable PMDS and NNP-NET for the layout. Does not work for tsNET(*) | False |
+| --feature_weight |  | Changes how much features are taken into account compared to graph data. 0 for graph data, 1 for features. Only has effect if the graph contains feature data | 0.5 |
+| --stress |  | Enabling this will calculate the *Stress* of the resulting graph layout(s) | False |
+| --feature_stress |  | Enabling this will calculate the *Feature Stress* of the resulting graph layout(s) | False |
+| --np |  | Enabling this will calculate the *Neighborhood Preservation* of the resulting graph layout(s) | False |
 
 ## Time series data
 
 Layouts for time-series data can be created by setting the `--time_series` flag to true. This will only have an effect when using either PMDS or NNP-NET. The first time-step has to be a standard graph file in any supported format. All subsequent time-steps only describe the change from one time-step to the next. An example of the expected format can be found in folder TestTimeseries. In order to run this example, you would use the following command:
 
 `./NNPNET TestTimeseries/3elt.mtx --time_series 1`
+
+## Multivariate Graphs
+
+For multivariate graphs, two files have to be provided: One with edge data, and one with feature data per node. In the folder *TestMultivariate*, an example can be found for how this data should be formated. `--feature_weight` can be used to change how much the features effect final layout, where 0 means only graph data is taken into account, and 1 means only feature data is taken into account. In order to run this example, you would use the following command:
+
+`./NNPNET TestMultivariate/Cora.tab --feature_weight 0.5`

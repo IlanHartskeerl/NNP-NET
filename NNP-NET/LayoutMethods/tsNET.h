@@ -69,6 +69,7 @@ namespace NNPNet {
 
                 for (int i = 0; i < g.nodeCount; i++) {
                     g.getDistances(i, X + (i * g.nodeCount));
+					g.addFeaturesToDistances(i, featureWeight, X + (i * g.nodeCount));
                 }
 
                 double biggest = 0;
@@ -104,9 +105,13 @@ namespace NNPNet {
             if (theta == 0) {
                 T* X = (T*)malloc(g.nodeCount * g.nodeCount * sizeof(T));
 
-                for (int i = 0; i < g.nodeCount; i++) {
-                    g.getDistances(i, X + (i * g.nodeCount));
-                }
+				auto f = [&g, X, this](int s, int e) {
+					for (int i = s; i < e; i++) {
+						g.getDistances(i, X + (i * g.nodeCount));
+						g.addFeaturesToDistances(i, featureWeight, X + (i * g.nodeCount));
+					}
+				};
+				Threadpool::divideWork(f, g.nodeCount);
 
                 double biggest = 0;
                 for (int i = 0; i < g.nodeCount * g.nodeCount; i++) {
@@ -136,6 +141,7 @@ namespace NNPNet {
         };
 
 		T perp = 40;
+		T featureWeight = 0;
 
     private:
 		inline T sign(T x) { return (x == .0 ? .0 : (x < .0 ? -1.0 : 1.0)); }
@@ -229,7 +235,8 @@ namespace NNPNet {
 				for (int i = 0; i < row_P[N]; i++) val_P[i] /= sum_P;
 
 				T* totD = (T*)malloc(N * sizeof(T));
-				g->dijkstra(0, totD);
+				g->getDistances(0, totD);
+				g->addFeaturesToDistances(0, featureWeight, totD);
 				scaleFactor = 0;
 				for (int i = 0; i < N; i++) {
 					if (scaleFactor < totD[i]) {
@@ -726,82 +733,92 @@ namespace NNPNet {
 			unsigned int* row_P = *_row_P;
 			unsigned int* col_P = *_col_P;
 			double* val_P = *_val_P;
-			double* cur_P = (double*)malloc((N - 1) * sizeof(double));
-			if (cur_P == NULL) { printf("Memory allocation failed!\n"); exit(1); }
 			row_P[0] = 0;
 			for (int n = 0; n < N; n++) row_P[n + 1] = row_P[n] + (unsigned int)K;
 
-			T* distances = (T*)malloc(K * sizeof(T));
-			int* nodes = (int*)malloc(K * sizeof(int));
-			for (int n = 0; n < N; n++) {
+			auto f = [row_P, col_P, val_P, N, this, K, perplexity](int begin, int end) {
+				double* cur_P = (double*)malloc((N - 1) * sizeof(double));
+				if (cur_P == NULL) { printf("Memory allocation failed!\n"); exit(1); }
+				T* distances = (T*)malloc(K * sizeof(T));
+				int* nodes = (int*)malloc(K * sizeof(int));
+				for (int n = begin; n < end; n++) {
 
-				if (n % 10000 == 0) printf(" - point %d of %d\n", n, N);
+					if (n % 10000 == 0) printf(" - point %d of %d\n", n, N);
 
-				// Find nearest neighbors
-				g->knn(n, nodes, distances, K);
-				for (int i = 0; i < K; i++) {
-					distances[i] *= scaleFactor;
-				}
-
-				// Initialize some variables for binary search
-				bool found = false;
-				double beta = 1.0;
-				double min_beta = -DBL_MAX;
-				double max_beta = DBL_MAX;
-				double tol = 1e-5;
-
-				// Iterate until we found a good perplexity
-				int iter = 0; double sum_P;
-				while (!found && iter < 200) {
-
-					// Compute Gaussian kernel row
-					for (int m = 0; m < K; m++) cur_P[m] = exp(-beta * distances[m] * distances[m]);
-
-					// Compute entropy of current row
-					sum_P = DBL_MIN;
-					for (int m = 0; m < K; m++) sum_P += cur_P[m];
-					double H = .0;
-					for (int m = 0; m < K; m++) H += beta * (distances[m] * distances[m] * cur_P[m]);
-					H = (H / sum_P) + log(sum_P);
-
-					// Evaluate whether the entropy is within the tolerance level
-					double Hdiff = H - log(perplexity);
-					if (Hdiff < tol && -Hdiff < tol) {
-						found = true;
+					// Find nearest neighbors
+					if (featureWeight > 0 && g->featureDimensions > 0) {
+						g->knnWithFeatures(n, nodes, distances, K, featureWeight);
 					}
 					else {
-						if (Hdiff > 0) {
-							min_beta = beta;
-							if (max_beta == DBL_MAX || max_beta == -DBL_MAX)
-								beta *= 2.0;
-							else
-								beta = (beta + max_beta) / 2.0;
-						}
-						else {
-							max_beta = beta;
-							if (min_beta == -DBL_MAX || min_beta == DBL_MAX)
-								beta /= 2.0;
-							else
-								beta = (beta + min_beta) / 2.0;
-						}
+						g->knn(n, nodes, distances, K);
+					}
+					for (int i = 0; i < K; i++) {
+						distances[i] *= scaleFactor;
 					}
 
-					// Update iteration counter
-					iter++;
-				}
+					// Initialize some variables for binary search
+					bool found = false;
+					double beta = 1.0;
+					double min_beta = -DBL_MAX;
+					double max_beta = DBL_MAX;
+					double tol = 1e-5;
 
-				// Row-normalize current row of P and store in matrix
-				for (unsigned int m = 0; m < K; m++) cur_P[m] /= sum_P;
-				for (unsigned int m = 0; m < K; m++) {
-					col_P[row_P[n] + m] = nodes[m];
-					val_P[row_P[n] + m] = cur_P[m];
-				}
-			}
+					// Iterate until we found a good perplexity
+					int iter = 0; double sum_P;
+					while (!found && iter < 200) {
 
-			// Clean up memory
-			free(cur_P);
-			free(distances);
-			free(nodes);
+						// Compute Gaussian kernel row
+						for (int m = 0; m < K; m++) cur_P[m] = exp(-beta * distances[m] * distances[m]);
+
+						// Compute entropy of current row
+						sum_P = DBL_MIN;
+						for (int m = 0; m < K; m++) sum_P += cur_P[m];
+						double H = .0;
+						for (int m = 0; m < K; m++) H += beta * (distances[m] * distances[m] * cur_P[m]);
+						H = (H / sum_P) + log(sum_P);
+
+						// Evaluate whether the entropy is within the tolerance level
+						double Hdiff = H - log(perplexity);
+						if (Hdiff < tol && -Hdiff < tol) {
+							found = true;
+						}
+						else {
+							if (Hdiff > 0) {
+								min_beta = beta;
+								if (max_beta == DBL_MAX || max_beta == -DBL_MAX)
+									beta *= 2.0;
+								else
+									beta = (beta + max_beta) / 2.0;
+							}
+							else {
+								max_beta = beta;
+								if (min_beta == -DBL_MAX || min_beta == DBL_MAX)
+									beta /= 2.0;
+								else
+									beta = (beta + min_beta) / 2.0;
+							}
+						}
+
+						// Update iteration counter
+						iter++;
+					}
+
+					// Row-normalize current row of P and store in matrix
+					for (unsigned int m = 0; m < K; m++) cur_P[m] /= sum_P;
+					for (unsigned int m = 0; m < K; m++) {
+						col_P[row_P[n] + m] = nodes[m];
+						val_P[row_P[n] + m] = cur_P[m];
+					}
+				}
+				// Clean up memory
+				free(cur_P);
+				free(distances);
+				free(nodes);
+			};
+
+			Threadpool::divideWork(f, N);
+
+
 
 		};
         void computeSquaredEuclideanDistance(T* X, int N, int D, T* DD) {
