@@ -385,7 +385,7 @@ int main(int argc, char* argv[])
 	std::string outPath;
 
 	std::unordered_map<Argument, double> settings;
-	settings[ARG_SMOOTH] = 0;
+	settings[ARG_SMOOTH] = 3;
 	settings[ARG_THETA] = 0.25;
 	settings[ARG_GPU] = 0;
 	settings[ARG_PERP] = 40;
