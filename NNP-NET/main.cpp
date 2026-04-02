@@ -112,10 +112,12 @@ void calculateMetrics(Graph<float>& g, std::unordered_map<Argument, double>& set
 
 void calculateMetrics(Graph<double>& g, std::unordered_map<Argument, double>& settings) {
 	if (settings[ARG_CALC_FEATURE_STRESS] > 0) {
-		CalcStress::CalcFeatureStress(Graph<float>(g));
+		Graph<float> gf(g);
+		CalcStress::CalcFeatureStress(gf);
 	}
 	if (settings[ARG_CALC_STRESS] > 0) {
-		CalcStress::Calc(Graph<float>(g));
+		Graph<float> gf(g);
+		CalcStress::Calc(gf);
 	}
 	if (settings[ARG_CALC_NP] > 0) {
 		NP::np(g);

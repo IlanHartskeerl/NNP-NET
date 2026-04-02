@@ -14,6 +14,10 @@
 
 #define SIMD_FEATURE_CALC
 
+#ifdef SIMD_FEATURE_CALC
+#include <immintrin.h>
+#endif
+
 namespace NNPNet {
 
 	template<typename T>

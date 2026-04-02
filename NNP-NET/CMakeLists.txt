@@ -53,6 +53,10 @@ if(NOT MSVC)
     set(CMAKE_BUILD_TYPE Release)
   endif()
 
+  target_compile_options(NNPNET PRIVATE -mavx2)
+  target_compile_options(NNP_NET PRIVATE -mavx2)
+
+
 endif()
 
 if (CMAKE_VERSION VERSION_GREATER 3.12)
