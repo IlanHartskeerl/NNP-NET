@@ -31,6 +31,7 @@
 
 using namespace std;					// make std:: available
 
+
 //----------------------------------------------------------------------
 //	Generic kd-tree node
 //
@@ -43,11 +44,21 @@ using namespace std;					// make std:: available
 //		this.
 //----------------------------------------------------------------------
 
+#include "pr_queue_k.h"
+struct ANNSearchData {
+	int				ANNkdDim;				// dimension of space
+	ANNpoint		ANNkdQ;					// query point
+	double			ANNkdMaxErr;			// max tolerable squared error
+	ANNpointArray	ANNkdPts;				// the points
+	ANNmin_k* ANNkdPointMK;			// set of k closest points
+	int				ANNptsVisited;
+};
+
 class ANNkd_node{						// generic kd-tree node (empty shell)
 public:
 	virtual ~ANNkd_node() {}					// virtual distroyer
 
-	virtual void ann_search(ANNdist) = 0;		// tree search
+	virtual void ann_search(ANNdist, ANNSearchData& a) = 0;		// tree search
 	virtual void ann_pri_search(ANNdist) = 0;	// priority search
 	virtual void ann_FR_search(ANNdist) = 0;	// fixed-radius search
 
@@ -110,7 +121,7 @@ public:
 	virtual void print(int level, ostream &out);// print node
 	virtual void dump(ostream &out);			// dump node
 
-	virtual void ann_search(ANNdist);			// standard search
+	virtual void ann_search(ANNdist, ANNSearchData& a);			// standard search
 	virtual void ann_pri_search(ANNdist);		// priority search
 	virtual void ann_FR_search(ANNdist);		// fixed-radius search
 };
@@ -176,7 +187,7 @@ public:
 	virtual void print(int level, ostream &out);// print node
 	virtual void dump(ostream &out);			// dump node
 
-	virtual void ann_search(ANNdist);			// standard search
+	virtual void ann_search(ANNdist, ANNSearchData& a);			// standard search
 	virtual void ann_pri_search(ANNdist);		// priority search
 	virtual void ann_FR_search(ANNdist);		// fixed-radius search
 };

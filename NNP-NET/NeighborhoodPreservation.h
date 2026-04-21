@@ -7,7 +7,6 @@ namespace NNPNet {
 	public:
 		template <typename T>
 		static T np(Graph<T>& g, T r = 2) {
-			T s = 0;
 
 			// Change r if the graph is weighted
 			if (g.weighted) {
@@ -23,7 +22,6 @@ namespace NNPNet {
 			}
 
 
-			int* rnnNodes = (int*)malloc(g.nodeCount * sizeof(int));
 
 			// Setup ANN tree
 			ANNpointArray inPoints = annAllocPts(g.nodeCount, g.outputDim);
@@ -34,49 +32,54 @@ namespace NNPNet {
 			}
 			ANNkd_tree* tree = new ANNkd_tree(inPoints, g.nodeCount, g.outputDim);
 
-			ANNdistArray dists = new ANNdist[g.nodeCount];
-			ANNidxArray idx = new ANNidx[g.nodeCount];
-			ANNpoint qPoint = annAllocPt(g.outputDim);
 
 			// Calculate np for all nodes
-			for (int j = 0; j < g.nodeCount; j++) {
-				// r-nn
-				int xnn = g.rnn(j, rnnNodes, r);
-				std::unordered_set<int> xnnNodes;
-				for (int i = 0; i < xnn; i++) {
-					xnnNodes.insert(rnnNodes[i]);
-				}
-				if (xnn > 10000) {
-					xnn = g.rnn(j, rnnNodes, r / 2);
-					xnnNodes.clear();
+			double s = Threadpool::divideWork((function<double(int, int)>)[&g, r, tree](int begin, int end) {
+				double s = 0;
+				int* rnnNodes = (int*)malloc(g.nodeCount * sizeof(int));
+				ANNdistArray dists = new ANNdist[g.nodeCount];
+				ANNidxArray idx = new ANNidx[g.nodeCount];
+				ANNpoint qPoint = annAllocPt(g.outputDim);
+				for (int j = begin; j < end; j++) {
+					// r-nn
+					int xnn = g.rnn(j, rnnNodes, r);
+					std::unordered_set<int> xnnNodes;
 					for (int i = 0; i < xnn; i++) {
 						xnnNodes.insert(rnnNodes[i]);
 					}
-				}
+					if (xnn > 10000) {
+						xnn = g.rnn(j, rnnNodes, r / 2);
+						xnnNodes.clear();
+						for (int i = 0; i < xnn; i++) {
+							xnnNodes.insert(rnnNodes[i]);
+						}
+					}
 
-				// k-nn
-				for (int d = 0; d < g.outputDim; d++) {
-					qPoint[d] = (ANNcoord)g.Y[j * g.outputDim + d];
-				}
-				tree->annkSearch(qPoint, xnn + 1, idx, dists, 0.0);
+					// k-nn
+					for (int d = 0; d < g.outputDim; d++) {
+						qPoint[d] = (ANNcoord)g.Y[j * g.outputDim + d];
+					}
+					tree->annkSearch(qPoint, xnn + 1, idx, dists, 0.0);
 
-				// Calculate overlap
-				int xOry = xnn, xAndy = 0;
-				// Skip first point, as that is the point we are querying
-				for (int i = 1; i < xnn + 1; i++) {
-					if (xnnNodes.count(idx[i]) != 0) xAndy++;
-					else xOry++;
+					// Calculate overlap
+					int xOry = xnn, xAndy = 0;
+					// Skip first point, as that is the point we are querying
+					for (int i = 1; i < xnn + 1; i++) {
+						if (xnnNodes.count(idx[i]) != 0) xAndy++;
+						else xOry++;
+					}
+					if (xOry > 0) s += ((double)xAndy) / ((double)xOry);
 				}
-				if (xOry > 0) s += ((T)xAndy) / ((T)xOry);
-			}
+				free(rnnNodes);
+				delete[] dists;
+				delete[] idx;
+				delete[] qPoint;
+				return s;
+				}, g.nodeCount, (function<double(double, double)>)[](double a, double b) {return a + b; });
 
 			// Cleanup
-			free(rnnNodes);
 			delete tree;
-			delete[] dists;
-			delete[] idx;
 			delete[] inPoints;
-			delete[] qPoint;
 
 			std::cout << "Neighborhood Presevation: " << std::to_string(s / g.nodeCount) << "\n";
 
