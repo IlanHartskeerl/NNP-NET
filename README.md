@@ -47,7 +47,7 @@ Supported input file types are .vna, .mtx and .dot. Output will always be done t
 | --pmds_pivots |  | Number of pivot points used by PMDS | 250 |
 | --batch_size | -b | Batch size used for training NNP as part of NNP-NET | 64 |
 | --training_epochs |  | Training epochs used for training NNP as part of NNP-NET | 40 |
-| --use_float | -f | Uses float instead of doubles for PMDS. Only effects PMDS calls. Doubles might be needed for very large graphs | True |
+| --use_float | -f | Uses float instead of doubles for PMDS. Only effects PMDS calls. Doubles might be needed for very large graphs | False |
 | --time_series |  | Loads time series data and uses stable PMDS and NNP-NET for the layout. Does not work for tsNET(*) | False |
 | --feature_weight |  | Changes how much features are taken into account compared to graph data. 0 for graph data, 1 for features. Only has effect if the graph contains feature data | 0.5 |
 | --stress |  | Enabling this will calculate the *Stress* of the resulting graph layout(s) | False |
