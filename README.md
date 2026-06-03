@@ -1,6 +1,6 @@
 # NNP-NET
 
-This repository is the original implementation of NNP-NET used in [this](https://drops.dagstuhl.de/entities/document/10.4230/LIPIcs.GD.2025.22) paper and [the subsequent extention](https://ieeexplore.ieee.org/abstract/document/11417320/). It also contains and implementation of tsNET(*) and PMDS. The tsNET implementation is based on the bhtsne implementation that can be found [here](https://github.com/lvdmaaten/bhtsne). The PMDS implementation was taken from [OGDF](https://github.com/ogdf/ogdf) and modified in order to support more than 3 output dimensions.
+This repository is the original implementation of NNP-NET used in [this](https://drops.dagstuhl.de/entities/document/10.4230/LIPIcs.GD.2025.22) paper and [the subsequent extention](https://ieeexplore.ieee.org/abstract/document/11417320/) which contains information about time series graphs. The paper discussing the multivariate graph support can be found [here](https://diglib.eg.org/items/8c4d8b6c-f516-4629-a262-d03ce1960ecd). It also contains and implementation of tsNET(*) and PMDS. The tsNET implementation is based on the bhtsne implementation that can be found [here](https://github.com/lvdmaaten/bhtsne). The PMDS implementation was taken from [OGDF](https://github.com/ogdf/ogdf) and modified in order to support more than 3 output dimensions.
 
 ## Python
 The build process will also create a python library. For an example of how to use this library, see the example.py file.
