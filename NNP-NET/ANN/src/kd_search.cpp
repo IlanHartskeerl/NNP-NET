@@ -99,8 +99,8 @@ void ANNkd_tree::annkSearch(
 	a.ANNkdMaxErr = ANN_POW(1.0 + eps);
 	ANN_FLOP(2)							// increment floating op count
 
-	a.ANNkdPointMK = new ANNmin_k(k);		// create set for closest k points
-										// search starting at the root
+		a.ANNkdPointMK = new ANNmin_k(k);		// create set for closest k points
+	// search starting at the root
 	root->ann_search(annBoxDistance(q, bnd_box_lo, bnd_box_hi, dim), a);
 
 	for (int i = 0; i < k; i++) {		// extract the k-th closest points
@@ -116,10 +116,10 @@ void ANNkd_tree::annkSearch(
 
 void ANNkd_split::ann_search(ANNdist box_dist, ANNSearchData& a)
 {
-										// check dist calc term condition
+	// check dist calc term condition
 	if (ANNmaxPtsVisited != 0 && ANNptsVisited > ANNmaxPtsVisited) return;
 
-										// distance to cutting plane
+	// distance to cutting plane
 	ANNcoord cut_diff = a.ANNkdQ[cut_dim] - cut_val;
 
 	if (cut_diff < 0) {					// left of cutting plane
@@ -128,11 +128,11 @@ void ANNkd_split::ann_search(ANNdist box_dist, ANNSearchData& a)
 		ANNcoord box_diff = cd_bnds[ANN_LO] - a.ANNkdQ[cut_dim];
 		if (box_diff < 0)				// within bounds - ignore
 			box_diff = 0;
-										// distance to further box
-		box_dist = (ANNdist) ANN_SUM(box_dist,
-				ANN_DIFF(ANN_POW(box_diff), ANN_POW(cut_diff)));
+		// distance to further box
+		box_dist = (ANNdist)ANN_SUM(box_dist,
+			ANN_DIFF(ANN_POW(box_diff), ANN_POW(cut_diff)));
 
-										// visit further child if close enough
+		// visit further child if close enough
 		if (box_dist * a.ANNkdMaxErr < a.ANNkdPointMK->max_key())
 			child[ANN_HI]->ann_search(box_dist, a);
 
@@ -143,17 +143,17 @@ void ANNkd_split::ann_search(ANNdist box_dist, ANNSearchData& a)
 		ANNcoord box_diff = a.ANNkdQ[cut_dim] - cd_bnds[ANN_HI];
 		if (box_diff < 0)				// within bounds - ignore
 			box_diff = 0;
-										// distance to further box
-		box_dist = (ANNdist) ANN_SUM(box_dist,
-				ANN_DIFF(ANN_POW(box_diff), ANN_POW(cut_diff)));
+		// distance to further box
+		box_dist = (ANNdist)ANN_SUM(box_dist,
+			ANN_DIFF(ANN_POW(box_diff), ANN_POW(cut_diff)));
 
-										// visit further child if close enough
+		// visit further child if close enough
 		if (box_dist * a.ANNkdMaxErr < a.ANNkdPointMK->max_key())
 			child[ANN_LO]->ann_search(box_dist, a);
 
 	}
 	ANN_FLOP(10)						// increment floating ops
-	ANN_SPL(1)							// one more splitting node visited
+		ANN_SPL(1)							// one more splitting node visited
 }
 
 //----------------------------------------------------------------------
@@ -179,25 +179,25 @@ void ANNkd_leaf::ann_search(ANNdist box_dist, ANNSearchData& a)
 		qq = a.ANNkdQ;					// first coord of query point
 		dist = 0;
 
-		for(d = 0; d < a.ANNkdDim; d++) {
+		for (d = 0; d < a.ANNkdDim; d++) {
 			ANN_COORD(1)				// one more coordinate hit
-			ANN_FLOP(4)					// increment floating ops
+				ANN_FLOP(4)					// increment floating ops
 
-			t = *(qq++) - *(pp++);		// compute length and adv coordinate
-										// exceeds dist to k-th smallest?
-			if( (dist = ANN_SUM(dist, ANN_POW(t))) > min_dist) {
+				t = *(qq++) - *(pp++);		// compute length and adv coordinate
+			// exceeds dist to k-th smallest?
+			if ((dist = ANN_SUM(dist, ANN_POW(t))) > min_dist) {
 				break;
 			}
 		}
 
 		if (d >= a.ANNkdDim &&					// among the k best?
-		   (ANN_ALLOW_SELF_MATCH || dist!=0)) { // and no self-match problem
-												// add it to the list
+			(ANN_ALLOW_SELF_MATCH || dist != 0)) { // and no self-match problem
+			// add it to the list
 			a.ANNkdPointMK->insert(dist, bkt[i]);
 			min_dist = a.ANNkdPointMK->max_key();
 		}
 	}
 	ANN_LEAF(1)							// one more leaf node visited
-	ANN_PTS(n_pts)						// increment points visited
-	ANNptsVisited += n_pts;				// increment number of points visited
+		ANN_PTS(n_pts)						// increment points visited
+		ANNptsVisited += n_pts;				// increment number of points visited
 }

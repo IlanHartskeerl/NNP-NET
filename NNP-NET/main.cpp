@@ -9,6 +9,8 @@
 namespace fs = std::filesystem;
 
 #include <cstring>
+#include "windows.h"
+#include "psapi.h"
 
 #include "main.h"
 #include "Graph.h"
@@ -16,6 +18,7 @@ namespace fs = std::filesystem;
 #include "LayoutMethods/NNPNET.h"
 #include "LayoutMethods/PivotMDS.h"
 #include "LayoutMethods/tsNET.h"
+#include "LayoutMethods/GLNet.h"
 
 #include "Utils.h"
 #include "Smoothing.h"
@@ -34,6 +37,8 @@ using namespace NNPNet;
 namespace py = pybind11;
 using namespace py::literals;
 
+
+#include "Log.h"
 
 enum Argument {
 	ARG_SMOOTH,
@@ -54,6 +59,7 @@ enum Argument {
 	ARG_CALC_STRESS,
 	ARG_CALC_FEATURE_STRESS,
 	ARG_CALC_NP,
+	ARG_KNN_K,
 
 	ARG_none
 };
@@ -63,6 +69,7 @@ enum Method {
 	METHOD_TSNET,
 	METHOD_TSNETSTAR,
 	METHOD_PMDS,
+	METHOD_GLNET,
 };
 
 std::unordered_map<std::string, Argument> argMap = {
@@ -95,6 +102,7 @@ std::unordered_map<std::string, Argument> argMap = {
 	{"--stress", ARG_CALC_STRESS},
 	{"--feature_stress", ARG_CALC_FEATURE_STRESS},
 	{"--np", ARG_CALC_NP},
+	{"-k", ARG_KNN_K},
 };
 
 
@@ -126,6 +134,7 @@ void calculateMetrics(Graph<double>& g, std::unordered_map<Argument, double>& se
 
 template<class T>
 void createLayoutFor(std::string path, std::string outPath, std::unordered_map<Argument, double>& settings) {
+	
 	switch ((Method)(int)settings[ARG_METHOD]) {
 	case METHOD_NNPNET:
 	{
@@ -208,19 +217,27 @@ void createLayoutFor(std::string path, std::string outPath, std::unordered_map<A
 		else {
 			// Not time-series
 			g.loadFromFile(path);
+
+			if (!g.checkFullyConnected()) {
+				std::cout << g.nodeCount << "\n";
+				g.onlyConnectedFrom(0);
+				std::cout << "Oeps not fully connected, force fully connected\n";
+				std::cout << g.nodeCount << "\n";
+			}
 			g.fillNodeNames();
 			g.onlyConnectedFrom(0);
 			if (!g.checkFullyConnected()) {
 				std::cout << "Not fully connected\n";
 			}
-			TIME(nnpnet.run(g, nullptr, settings[ARG_EMBEDDING_SIZE]);
-			if (settings[ARG_SMOOTH] >= 1) {
+			Log::addEntry(g.nodeCount, "Node Count");
+			TIMELOG(nnpnet.run(g, nullptr, settings[ARG_EMBEDDING_SIZE]);
+			if (settings[ARG_SMOOTH] >= 1 && false) {
 				SmoothingFunctions::Laplacian(g, settings[ARG_SMOOTH]);
 			}, "NNP-NET");
-			std::cout << "Saving to " << outPath << "\n";
-			g.saveToVNA(outPath);
-
 			calculateMetrics(g, settings);
+			g.saveToVNA(outPath);
+			//TIME(SmoothingFunctions::edgeStressSmoothing(g), "Smoothing");
+			std::cout << "Saving to " << outPath << "\n";
 		}
 
 	}
@@ -293,9 +310,17 @@ void createLayoutFor(std::string path, std::string outPath, std::unordered_map<A
 		else { // PMDS non time series
 			Graph<T> g(settings[ARG_DIMENSIONS]);
 			g.loadFromFile(path);
+
+			if (!g.checkFullyConnected()) {
+				std::cout << g.nodeCount << "\n";
+				g.onlyConnectedFrom(0);
+				std::cout << "Oeps not fully connected, force fully connected\n";
+				std::cout << g.nodeCount << "\n";
+			}
+			Log::addEntry(g.nodeCount, "Node Count");
 			PivotMDS<T> pmds;
 			pmds.setNumberOfPivots(settings[ARG_PMDS_PIVOTS]);
-			TIME(pmds.call(g), "PMDS");
+			TIMELOG(pmds.call(g), "PMDS");
 			std::cout << "Saving to " << outPath << "\n";
 			g.saveToVNA(outPath);
 			calculateMetrics(g, settings);
@@ -323,6 +348,48 @@ void createLayoutFor(std::string path, std::string outPath, std::unordered_map<A
 		tsnet.perp = settings[ARG_PERP];
 		tsnet.featureWeight = settings[ARG_FEATURE_WEIGHT];
 		TIME(tsnet.tsNETStar(g, settings[ARG_THETA]), "tsNET*");
+		std::cout << "Saving to " << outPath << "\n";
+		g.saveToVNA(outPath);
+		calculateMetrics(g, settings);
+	}
+	break;
+	case METHOD_GLNET:
+	{
+		Graph<float> g(settings[ARG_DIMENSIONS]);
+		g.loadFromFile(path);
+		GLNet<float> gl;
+		gl.perplexity = settings[ARG_PERP];
+		gl.theta = settings[ARG_THETA];
+
+		if (!g.checkFullyConnected()) {
+			std::cout << g.nodeCount << "\n";
+			g.onlyConnectedFrom(0);
+			std::cout << "Oeps not fully connected, force fully connected\n";
+			std::cout << g.nodeCount << "\n";
+		}
+
+		size_t edgeCount = 0;
+		for (auto& edges : g.edges) {
+			edgeCount += edges.size();
+		}
+		edgeCount /= 2;
+		int k = 3;
+		if (settings[ARG_KNN_K] > 2) {
+			k = settings[ARG_KNN_K];
+		}
+		else {
+			if (((double)edgeCount) / ((double)g.nodeCount) < 1.15) k = 9;
+			else if (((double)edgeCount) / ((double)g.nodeCount) < 2.5) k = 5;
+		}
+
+		gl.k = k;
+		Log::addEntry(k, "kNN k");
+		Log::addEntry(g.nodeCount, "Node Count");
+		Log::addEntry(std::to_string(edgeCount), "Edge Count");
+		gl.smoothIter = (int)settings[ARG_SMOOTH];
+		gl.subpoints = (int)settings[ARG_SUBGRAPH_SIZE];
+
+		TIMELOG(gl.run(g), "Fast Layout");
 		std::cout << "Saving to " << outPath << "\n";
 		g.saveToVNA(outPath);
 		calculateMetrics(g, settings);
@@ -364,10 +431,17 @@ void printSettings(std::unordered_map<Argument, double>& settings) {
 
 		break;
 	case METHOD_PMDS: std::cout << "PMDS\n";
-		std::cout << "tsNET* settings: \n"
+		std::cout << "PMDS settings: \n"
 			<< "\tPMDS Pivots: " << settings[ARG_PMDS_PIVOTS] << "\n"
 			<< "\tUses float precision: " << (settings[ARG_USE_FLOAT] == 0 ? "Double" : "Float") << "\n"
 			<< "\tTime series data: " << (settings[ARG_TIME_SERIES] == 0 ? "No" : "Yes") << "\n";
+		break;
+	case METHOD_GLNET: std::cout << "GL-Net\n";
+		std::cout << "GL-Net settings: \n"
+			<< "\tk: " << (settings[ARG_KNN_K] > 2 ? std::to_string(settings[ARG_KNN_K]) : std::string("Auto")) << "\n"
+			<< "\tPerplexity: " << settings[ARG_PERP] << "\n"
+			<< "\tSubgraph size: " << (int)settings[ARG_SUBGRAPH_SIZE] << "\n"
+			<< "\tTheta: " << settings[ARG_THETA] << "\n";
 		break;
 	}
 
@@ -378,6 +452,7 @@ void printSettings(std::unordered_map<Argument, double>& settings) {
 		"\tNeighborhood preservation: " << (settings[ARG_CALC_NP] == 0 ? "No\n\n" : "Yes\n\n");
 }
 
+
 int main(int argc, char* argv[])
 {
 	py::scoped_interpreter guard{};
@@ -387,11 +462,11 @@ int main(int argc, char* argv[])
 	std::string outPath;
 
 	std::unordered_map<Argument, double> settings;
-	settings[ARG_SMOOTH] = 3;
+	settings[ARG_SMOOTH] = 2;
 	settings[ARG_THETA] = 0.25;
 	settings[ARG_GPU] = 0;
 	settings[ARG_PERP] = 40;
-	settings[ARG_METHOD] = METHOD_NNPNET;
+	settings[ARG_METHOD] = METHOD_GLNET;
 	settings[ARG_EMBEDDING_SIZE] = 50;
 	settings[ARG_SUBGRAPH_SIZE] = 10000;
 	settings[ARG_PMDS_PIVOTS] = 250;
@@ -402,9 +477,11 @@ int main(int argc, char* argv[])
 	settings[ARG_TIME_SERIES] = 0;
 	settings[ARG_FEATURE_WEIGHT] = 0.5;
 	settings[ARG_CALC_FEATURE_STRESS] = false;
-	settings[ARG_CALC_STRESS] = false;
-	settings[ARG_CALC_NP] = false;
+	settings[ARG_CALC_STRESS] = true;
+	settings[ARG_CALC_NP] = true;
+	settings[ARG_KNN_K] = -1;
 
+	Log::reset(LOG_PATH);
 
 	if (argc == 1) {
 		std::cout << "Enter path\n";
@@ -443,6 +520,7 @@ int main(int argc, char* argv[])
 			case ARG_BATCH_SIZE:
 			case ARG_TRAINING_EPOCHS:
 			case ARG_PMDS_PIVOTS:
+			case ARG_KNN_K:
 			case ARG_FEATURE_WEIGHT:
 				settings[setting] = std::stod(argv[i]);
 				break;
@@ -463,6 +541,9 @@ int main(int argc, char* argv[])
 				}
 				else if (argS == "tsNET*" || argS == "tsnet*" || argS == "TSNET*") {
 					settings[setting] = METHOD_TSNETSTAR;
+				}
+				else if (argS == "GLNET" || argS == "GL-NET" || argS == "GL-net" || argS == "GL-Net" || argS == "GLNet" || argS == "GLnet" || argS == "gl-net" || argS == "GLNET" ) {
+					settings[setting] = METHOD_GLNET;
 				}
 				else if (argS == "pmds" || argS == "PMDS" || argS == "Pmds" || argS == "PivotMDS" || argS == "pivotmds" || argS == "pivotMDS") {
 					settings[setting] = METHOD_PMDS;
@@ -507,10 +588,10 @@ int main(int argc, char* argv[])
 			std::string fileName = splittedPath[splittedPath.size() - 1];
 			
 			std::cout << "\nCurrent file: " << p << "\n";
-
 			std::string oPath;
+
 			if (outPath == "") {
-				oPath = p.substr(0, p.size() - 4) + "_out_w" + std::to_string(settings[ARG_FEATURE_WEIGHT]) + ".vna";
+				oPath = p.substr(0, p.size() - 4) + "_out.vna";
 			}
 			else {
 				oPath = outPath;
@@ -520,14 +601,20 @@ int main(int argc, char* argv[])
 				oPath += fileName.substr(0, fileName.length() - 4) + ".vna";
 			}
 
+			Log::nextRow();
+			Log::addEntry(fileName, "File");
+
+
 			if (settings[ARG_USE_FLOAT]) {
 				createLayoutFor<float>(p, oPath, settings);
 			}
 			else {
 				createLayoutFor<double>(p, oPath, settings);
 			}
+			
 		}
 	}
+	Log::save();
 
 	return 0;
 }

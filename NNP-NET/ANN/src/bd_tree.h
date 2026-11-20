@@ -67,30 +67,30 @@ public:
 	ANNbd_shrink(						// constructor
 		int				nb,				// number of bounding halfspaces
 		ANNorthHSArray	bds,			// list of bounding halfspaces
-		ANNkd_ptr ic=NULL, ANNkd_ptr oc=NULL)	// children
-		{
-			n_bnds			= nb;				// cutting dimension
-			bnds			= bds;				// assign bounds
-			child[ANN_IN]	= ic;				// set children
-			child[ANN_OUT]	= oc;
-		}
+		ANNkd_ptr ic = NULL, ANNkd_ptr oc = NULL)	// children
+	{
+		n_bnds = nb;				// cutting dimension
+		bnds = bds;				// assign bounds
+		child[ANN_IN] = ic;				// set children
+		child[ANN_OUT] = oc;
+	}
 
 	~ANNbd_shrink()						// destructor
-		{
-			if (child[ANN_IN]!= NULL && child[ANN_IN]!=  KD_TRIVIAL) 
-				delete child[ANN_IN];
-			if (child[ANN_OUT]!= NULL&& child[ANN_OUT]!= KD_TRIVIAL) 
-				delete child[ANN_OUT];
-			if (bnds != NULL)
-				delete [] bnds;			// delete bounds
-		}
+	{
+		if (child[ANN_IN] != NULL && child[ANN_IN] != KD_TRIVIAL)
+			delete child[ANN_IN];
+		if (child[ANN_OUT] != NULL && child[ANN_OUT] != KD_TRIVIAL)
+			delete child[ANN_OUT];
+		if (bnds != NULL)
+			delete[] bnds;			// delete bounds
+	}
 
 	virtual void getStats(						// get tree statistics
-				int dim,						// dimension of space
-				ANNkdStats &st,					// statistics
-				ANNorthRect &bnd_box);			// bounding box
-	virtual void print(int level, ostream &out);// print node
-	virtual void dump(ostream &out);			// dump node
+		int dim,						// dimension of space
+		ANNkdStats& st,					// statistics
+		ANNorthRect& bnd_box);			// bounding box
+	virtual void print(int level, ostream& out);// print node
+	virtual void dump(ostream& out);			// dump node
 
 	virtual void ann_search(ANNdist, ANNSearchData& a);			// standard search
 	virtual void ann_pri_search(ANNdist);		// priority search

@@ -100,7 +100,7 @@ namespace NNPNet {
         };
         void tsNETStar(Graph<T>& g, double theta = 0, int iterations = 1500) {
             this->g = &g;
-            PivotMDS<double> p;
+            PivotMDS<T> p;
             p.call(g);
             if (theta == 0) {
                 T* X = (T*)malloc(g.nodeCount * g.nodeCount * sizeof(T));
@@ -303,7 +303,7 @@ namespace NNPNet {
 						total_time += (float)(end - start) / CLOCKS_PER_SEC;
 						printf("Iteration %d: error is %f (50 iterations in %4.2f seconds)\n", iter, C, (float)(end - start) / CLOCKS_PER_SEC);
 					}
-					if (prevError - C < 0.00001 && stop_lying_iter + 5 < iter) {
+					if (prevError - C < 0.001 && stop_lying_iter + 5 < iter) {
 						if (switched) {
 							std::cout << "Stopping early\n";
 							break;

@@ -24,12 +24,6 @@ namespace NNPNet {
 
 		float* createPMDSEmbedding(Graph<float>& g, int& dimensions, bool* inAll, int** pivotPoints);
 
-		void createSubnetwork(Graph<float>& inG, Graph<float>& outG, std::vector<int>& nodes);
-
-		void createFastSubnetwork(Graph<float>& inG, Graph<float>& outG, std::vector<int>& nodes);
-		int fastSubnetworkIteration(Graph<float>& in, Graph<float>& out, std::vector<int>& inNodes, std::vector<int>& outNodes, int target, int startPos = 0);
-		void getFastSubnetworkOrder(Graph<float>& g, std::vector<std::pair<int, int>>& list);
-
 		void trainNetwork(Graph<float>& g, Graph<double>* GT, float* embedding, int embeddingDim);
 	
 		void multivariteSubgraph(Graph<float>& g, Graph<float>& subG, std::vector<int>& nodes);

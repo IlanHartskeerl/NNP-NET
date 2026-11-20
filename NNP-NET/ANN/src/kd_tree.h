@@ -54,7 +54,7 @@ struct ANNSearchData {
 	int				ANNptsVisited;
 };
 
-class ANNkd_node{						// generic kd-tree node (empty shell)
+class ANNkd_node {						// generic kd-tree node (empty shell)
 public:
 	virtual ~ANNkd_node() {}					// virtual distroyer
 
@@ -63,12 +63,12 @@ public:
 	virtual void ann_FR_search(ANNdist) = 0;	// fixed-radius search
 
 	virtual void getStats(						// get tree statistics
-				int dim,						// dimension of space
-				ANNkdStats &st,					// statistics
-				ANNorthRect &bnd_box) = 0;		// bounding box
-												// print node
-	virtual void print(int level, ostream &out) = 0;
-	virtual void dump(ostream &out) = 0;		// dump node
+		int dim,						// dimension of space
+		ANNkdStats& st,					// statistics
+		ANNorthRect& bnd_box) = 0;		// bounding box
+	// print node
+	virtual void print(int level, ostream& out) = 0;
+	virtual void dump(ostream& out) = 0;		// dump node
 
 	friend class ANNkd_tree;					// allow kd-tree to access us
 };
@@ -83,12 +83,12 @@ public:
 typedef void (*ANNkd_splitter)(			// splitting routine for kd-trees
 	ANNpointArray		pa,				// point array (unaltered)
 	ANNidxArray			pidx,			// point indices (permuted on return)
-	const ANNorthRect	&bnds,			// bounding rectangle for cell
+	const ANNorthRect& bnds,			// bounding rectangle for cell
 	int					n,				// number of points
 	int					dim,			// dimension of space
-	int					&cut_dim,		// cutting dimension (returned)
-	ANNcoord			&cut_val,		// cutting value (returned)
-	int					&n_lo);			// num of points on low side (returned)
+	int& cut_dim,		// cutting dimension (returned)
+	ANNcoord& cut_val,		// cutting value (returned)
+	int& n_lo);			// num of points on low side (returned)
 
 //----------------------------------------------------------------------
 //	Leaf kd-tree node
@@ -99,7 +99,7 @@ typedef void (*ANNkd_splitter)(			// splitting routine for kd-trees
 //		that reside in this bucket.
 //----------------------------------------------------------------------
 
-class ANNkd_leaf: public ANNkd_node		// leaf node for kd-tree
+class ANNkd_leaf : public ANNkd_node		// leaf node for kd-tree
 {
 	int					n_pts;			// no. points in bucket
 	ANNidxArray			bkt;			// bucket of points
@@ -107,19 +107,19 @@ public:
 	ANNkd_leaf(							// constructor
 		int				n,				// number of points
 		ANNidxArray		b)				// bucket
-		{
-			n_pts		= n;			// number of points in bucket
-			bkt			= b;			// the bucket
-		}
+	{
+		n_pts = n;			// number of points in bucket
+		bkt = b;			// the bucket
+	}
 
-	~ANNkd_leaf() { }					// destructor (none)
+	~ANNkd_leaf() {}					// destructor (none)
 
 	virtual void getStats(						// get tree statistics
-				int dim,						// dimension of space
-				ANNkdStats &st,					// statistics
-				ANNorthRect &bnd_box);			// bounding box
-	virtual void print(int level, ostream &out);// print node
-	virtual void dump(ostream &out);			// dump node
+		int dim,						// dimension of space
+		ANNkdStats& st,					// statistics
+		ANNorthRect& bnd_box);			// bounding box
+	virtual void print(int level, ostream& out);// print node
+	virtual void dump(ostream& out);			// dump node
 
 	virtual void ann_search(ANNdist, ANNSearchData& a);			// standard search
 	virtual void ann_pri_search(ANNdist);		// priority search
@@ -137,7 +137,7 @@ public:
 //		a small memory leak.
 //----------------------------------------------------------------------
 
-extern ANNkd_leaf *KD_TRIVIAL;					// trivial (empty) leaf node
+extern ANNkd_leaf* KD_TRIVIAL;					// trivial (empty) leaf node
 
 //----------------------------------------------------------------------
 //	kd-tree splitting node.
@@ -155,37 +155,37 @@ class ANNkd_split : public ANNkd_node	// splitting node of a kd-tree
 	int					cut_dim;		// dim orthogonal to cutting plane
 	ANNcoord			cut_val;		// location of cutting plane
 	ANNcoord			cd_bnds[2];		// lower and upper bounds of
-										// rectangle along cut_dim
+	// rectangle along cut_dim
 	ANNkd_ptr			child[2];		// left and right children
 public:
 	ANNkd_split(						// constructor
 		int cd,							// cutting dimension
 		ANNcoord cv,					// cutting value
 		ANNcoord lv, ANNcoord hv,				// low and high values
-		ANNkd_ptr lc=NULL, ANNkd_ptr hc=NULL)	// children
-		{
-			cut_dim		= cd;					// cutting dimension
-			cut_val		= cv;					// cutting value
-			cd_bnds[ANN_LO] = lv;				// lower bound for rectangle
-			cd_bnds[ANN_HI] = hv;				// upper bound for rectangle
-			child[ANN_LO]	= lc;				// left child
-			child[ANN_HI]	= hc;				// right child
-		}
+		ANNkd_ptr lc = NULL, ANNkd_ptr hc = NULL)	// children
+	{
+		cut_dim = cd;					// cutting dimension
+		cut_val = cv;					// cutting value
+		cd_bnds[ANN_LO] = lv;				// lower bound for rectangle
+		cd_bnds[ANN_HI] = hv;				// upper bound for rectangle
+		child[ANN_LO] = lc;				// left child
+		child[ANN_HI] = hc;				// right child
+	}
 
 	~ANNkd_split()						// destructor
-		{
-			if (child[ANN_LO]!= NULL && child[ANN_LO]!= KD_TRIVIAL)
-				delete child[ANN_LO];
-			if (child[ANN_HI]!= NULL && child[ANN_HI]!= KD_TRIVIAL)
-				delete child[ANN_HI];
-		}
+	{
+		if (child[ANN_LO] != NULL && child[ANN_LO] != KD_TRIVIAL)
+			delete child[ANN_LO];
+		if (child[ANN_HI] != NULL && child[ANN_HI] != KD_TRIVIAL)
+			delete child[ANN_HI];
+	}
 
 	virtual void getStats(						// get tree statistics
-				int dim,						// dimension of space
-				ANNkdStats &st,					// statistics
-				ANNorthRect &bnd_box);			// bounding box
-	virtual void print(int level, ostream &out);// print node
-	virtual void dump(ostream &out);			// dump node
+		int dim,						// dimension of space
+		ANNkdStats& st,					// statistics
+		ANNorthRect& bnd_box);			// bounding box
+	virtual void print(int level, ostream& out);// print node
+	virtual void dump(ostream& out);			// dump node
 
 	virtual void ann_search(ANNdist, ANNSearchData& a);			// standard search
 	virtual void ann_pri_search(ANNdist);		// priority search
@@ -202,7 +202,7 @@ ANNkd_ptr rkd_tree(				// recursive construction of kd-tree
 	int					n,				// number of points
 	int					dim,			// dimension of space
 	int					bsp,			// bucket space
-	ANNorthRect			&bnd_box,		// bounding box for current node
+	ANNorthRect& bnd_box,		// bounding box for current node
 	ANNkd_splitter		splitter);		// splitting routine
 
 #endif

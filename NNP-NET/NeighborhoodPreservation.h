@@ -75,13 +75,15 @@ namespace NNPNet {
 				delete[] idx;
 				delete[] qPoint;
 				return s;
-				}, g.nodeCount, (function<double(double, double)>)[](double a, double b) {return a + b; });
+			}, g.nodeCount, (function<double(double, double)>)[](double a, double b) {return a + b; });
 
 			// Cleanup
 			delete tree;
 			delete[] inPoints;
 
 			std::cout << "Neighborhood Presevation: " << std::to_string(s / g.nodeCount) << "\n";
+
+			Log::addEntry(std::to_string(s / g.nodeCount), "NP");
 
 			return s / g.nodeCount;
 		};

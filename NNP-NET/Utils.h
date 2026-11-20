@@ -4,6 +4,7 @@
 #include <vector>
 #include <chrono>
 #include <iostream>
+#include "Log.h"
 
 namespace NNPNet {
 	class Utils {
@@ -40,6 +41,14 @@ Clock __c; \
 auto __start = __c.now();\
 toTime;\
 std::cout  << "Time " name ": " << (__c.now() - __start).count() / 1000000000.0 << "\n";\
+}
+
+#define TIMELOG(toTime, name){\
+Clock __c; \
+auto __start = __c.now();\
+toTime;\
+std::cout  << "Time " name ": " << (__c.now() - __start).count() / 1000000000.0 << "\n";\
+Log::addEntry(std::to_string((__c.now() - __start).count() / 1000000000.0), "Time "  name);\
 }
 
 };

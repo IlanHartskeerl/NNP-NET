@@ -85,6 +85,7 @@ namespace NNPNet {
 			if (tCount == -1) {
 				tCount = std::thread::hardware_concurrency();
 			}
+
 			t = new Threadpool(tCount);
 		}
 

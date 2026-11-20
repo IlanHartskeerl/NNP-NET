@@ -89,6 +89,8 @@ namespace NNPNet {
 				stress = getStress(g, amountToCheck, alpha, allData);
 				std::cout << "Stress: " << stress << "\n";
 
+				Log::addEntry(std::to_string(stress), "Stress");
+
 				free(allData);
 		}
 

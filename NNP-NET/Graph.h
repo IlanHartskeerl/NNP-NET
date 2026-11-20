@@ -9,6 +9,7 @@
 #include <math.h>
 #include <fstream>
 #include <cstring>
+#include "CustomDict.h"
 
 #include "Utils.h"
 
@@ -19,6 +20,14 @@
 #endif
 
 namespace NNPNet {
+	struct pairhash {
+	public:
+		template <typename T, typename U>
+		std::size_t operator()(const std::pair<T, U>& x) const
+		{
+			return std::hash<T>()(x.first) ^ std::hash<U>()(x.second);
+		}
+	};
 
 	template<typename T>
 	struct Edge {
@@ -68,6 +77,11 @@ namespace NNPNet {
 				i++;
 			}
 			Y = (T*)malloc(((size_t)nodeCount) * ((size_t)outputDim) * sizeof(T));
+			if (g.Y != nullptr) {
+				for (size_t i = 0; i < ((size_t)nodeCount) * ((size_t)outputDim); i++) {
+					Y[i] = (T)g.Y[i];
+				}
+			}
 			if (g.nodeNames.size() > 0) {
 				nodeNames.resize(g.nodeNames.size());
 				memcpy(nodeNames.data(), g.nodeNames.data(), sizeof(int) * g.nodeNames.size());
@@ -112,6 +126,16 @@ namespace NNPNet {
 			}
 		};
 
+		// Specifically used to get quick subgraphs
+		void updateDistances(int source, T* distances) {
+			if (weighted) {
+				dijkstra(source, distances, true);
+			}
+			else {
+				bfs(source, distances, true);
+			}
+		};
+
 		bool checkFullyConnected() {
 			T* dist = (T*)malloc(sizeof(T) * nodeCount);
 			for (int i = 0; i < nodeCount; i++) {
@@ -123,10 +147,11 @@ namespace NNPNet {
 					return false;
 				}
 			}
+			free(dist);
 			return true;
 		}
 
-		void dijkstra(int source, T* distances) {
+		void dijkstra(int source, T* distances, bool update = false) {
 			bool* visited = (bool*)malloc(nodeCount * sizeof(bool));
 			for (int i = 0; i < nodeCount; i++) {
 				visited[i] = false;
@@ -153,7 +178,7 @@ namespace NNPNet {
 				auto length = stack.begin()->first;
 				
 				stack.begin()->second.pop_back();
-				if (visited[lowest]) {
+				if (visited[lowest] || (update && distances[lowest] <= lowest)) {
 					continue;
 				}
 				pointsLeft--;
@@ -233,6 +258,81 @@ namespace NNPNet {
 			return count;
 		}
 
+		int rnn(int source, int* nodes, T maxDistance, T* distances) {
+			if (weighted) {
+				return rnnWeighted(source, nodes, maxDistance, distances);
+			}
+			return rnnUnweighted(source, nodes, maxDistance, distances);
+		}
+
+		int rnnWeighted(int source, int* nodes, T maxDistance, T* distances) {
+
+			std::unordered_set<int> visited;
+
+			std::map<T, std::vector<int>> stack;
+			visited.insert(source);
+			bool addExtraEdges = edges[source].size() != nodeCount - 1;
+			for (auto& e : edges[source]) {
+				if (e.weight <= maxDistance) {
+					stack[e.weight].push_back(e.other);
+				}
+			}
+			int nodeC = 0;
+			int pointsLeft = nodeCount - 1;
+			while (stack.size() > 0 && pointsLeft > 0) {
+				while (stack.size() > 0 && stack.begin()->second.size() == 0) {
+					auto key = stack.begin()->first;
+					stack.erase(key);
+				}
+				if (stack.size() == 0) {
+					break;
+				}
+				auto lowest = stack.begin()->second[stack.begin()->second.size() - 1];
+				auto length = stack.begin()->first;
+				stack.begin()->second.pop_back();
+				if (visited.count(lowest) > 0) {
+					continue;
+				}
+				pointsLeft--;
+				visited.insert(lowest);
+				distances[nodeC] = length;
+				nodes[nodeC++] = lowest;
+				if (!addExtraEdges) continue;
+				for (auto& e : edges[lowest]) {
+					if (visited.count(e.other) > 0 || length + e.weight > maxDistance) continue;
+					stack[length + e.weight].push_back(e.other);
+				}
+			}
+			return nodeC;
+		};
+
+		int rnnUnweighted(int source, int* nodes, T r, T* distances) {
+			std::unordered_set<int> visited;
+
+			int nodeCount = 0;
+			std::vector<int> nextList;
+			std::vector<int> curList;
+
+			curList.push_back(source);
+			int curDist = 1;
+			while (curList.size() > 0 && curDist <= r) {
+				nextList.clear();
+				for (int s : curList) {
+					for (const auto& edge : edges[s]) {
+						if (visited.count(edge.other) > 0) continue;
+						distances[nodeCount] = curDist;
+						nodes[nodeCount++] = edge.other;
+						visited.insert(edge.other);
+						nextList.push_back(edge.other);
+					}
+				}
+
+				curDist++;
+				std::swap(curList, nextList);
+			}
+			return nodeCount;
+		};
+
 		void knn(int source, int* nodes, T* distances, int k) {
 			std::unordered_set<int> visited;
 
@@ -271,9 +371,11 @@ namespace NNPNet {
 			}
 		};
 
-		void bfs(int source, T* distances) {
-			for (int i = 0; i < nodeCount; i++) {
-				distances[i] = -1;
+		void bfs(int source, T* distances, bool update = false) {
+			if (!update) {
+				for (int i = 0; i < nodeCount; i++) {
+					distances[i] = -1;
+				}
 			}
 
 			int pointsLeft = nodeCount;
@@ -285,12 +387,23 @@ namespace NNPNet {
 			int curDist = 1;
 			while (curList.size() > 0) {
 				nextList.clear();
-
-				for (int s : curList) {
-					for (const auto& edge : edges[s]) {
-						if (distances[edge.other] != -1) continue;
-						distances[edge.other] = curDist;
-						nextList.push_back(edge.other);
+				
+				if (update) {
+					for (int s : curList) {
+						for (const auto& edge : edges[s]) {
+							if (distances[edge.other] <= curDist) continue;
+							distances[edge.other] = curDist;
+							nextList.push_back(edge.other);
+						}
+					}
+				}
+				else {
+					for (int s : curList) {
+						for (const auto& edge : edges[s]) {
+							if (distances[edge.other] != -1) continue;
+							distances[edge.other] = curDist;
+							nextList.push_back(edge.other);
+						}
 					}
 				}
 				curDist++;
@@ -575,7 +688,9 @@ namespace NNPNet {
 				edges[e0].push_back(Edge<T>(e1, 1));
 				edges[e1].push_back(Edge<T>(e0, 1));
 			}
+
 			Y = (T*)malloc(nodeCount * outputDim * sizeof(T));
+			
 		}
 
 		void loadFromTAB(std::string path) {
@@ -770,6 +885,13 @@ namespace NNPNet {
 			for (int i = 0; i < nodeCount; i++) {
 				distances[i] = -1;
 			}
+			if (nodeNames.size() == 0) {
+				nodeNames.resize(nodeCount);
+				for (int i = 0; i < nodeCount; i++) {
+					nodeNames[i] = i;
+				}
+			}
+			
 			bfs(id, distances);
 			for (int i = nodeCount - 1; i >= 0; i--) {
 				if (distances[i] == -1) {
@@ -816,6 +938,111 @@ namespace NNPNet {
 			selectKDistances(d, nodes, k, source, distances);
 			free(d);
 		};
+
+		/// <summary>
+		/// Can give more neighbors then k, but at minimum gives k neighbors
+		/// </summary>
+		void floodKNNUnweighted(std::vector<int>& nodes, int k, std::vector<std::unordered_map<int, T>>& knn) {
+			// Setup
+			int N = nodeCount;
+			knn.resize(N);
+			std::vector<char> done(N);
+			std::unordered_set<std::pair<int, int>, pairhash> current;
+			std::unordered_set<std::pair<int, int>, pairhash> next;
+			for (int i : nodes) {
+				done[i] = 1;
+				current.insert({ i, i });
+			}
+			T distance = 1;
+			// bfs based knn all at the same time
+			while (current.size() > 0) {
+				for (std::pair<int, int> cur : current) {
+					int curNode = cur.first;
+					int curSource = cur.second;
+					for (Edge<T> e : edges[curNode]) {
+						int n = e.other;
+						if (!done[n] && knn[n].count(curSource) == 0) {
+							knn[n][curSource] = distance;
+							next.insert({n, curSource});
+						}
+					}
+				}
+				for (int i = 0; i < N; i++) {
+					if (knn[i].size() >= k) {
+						done[i] = 1;
+					}
+				}
+				distance += 1;
+				current.clear();
+				std::swap(current, next);
+			}
+
+		}
+
+		/// <summary>
+		/// Can give more neighbors then k, but at minimum gives k neighbors
+		/// </summary>
+		void floodKNNUnweightedRev(std::vector<int>& nodes, int k, std::vector<CustomDict<T>>& knn) {
+			// Setup
+			int N = nodeCount;
+			knn.resize(N);
+			std::vector<int> lastChange(N);
+			std::vector<int> nextChange(N);
+			for (int i : nodes) {
+				knn[i].insert(i, 0);
+			}
+			T distance = 1;
+			bool stop = false;
+			// bfs based knn all at the same time
+			while (!stop) {
+				std::function<bool (int, int)> f = [this, &knn, k, distance, &lastChange, &nextChange](int begin, int end)->int {
+					bool stop = true;
+					int dMinOne = distance - 1;
+					__m256i dist8 = _mm256_set1_epi32(dMinOne - 1);
+					for (int n = begin; n < end; n++) {
+						if (end - n >= 8) {
+							int a = _mm256_movemask_ps(*((__m256*) & _mm256_cmpgt_epi32((*(__m256i*)(lastChange.data() + n)), dist8)));
+							if (0 == a) {
+								n += 7;
+								continue;
+							}
+							for (n; lastChange[n] < dMinOne; n++);
+						} else if (lastChange[n] != dMinOne) continue;
+						bool changed = false;
+						if (knn[n].size() >= k) { // Check again because of multithread race condition
+							lastChange[n] = -1; // Mark as done
+							nextChange[n] = -1;
+							continue;
+						}
+						for (auto e : edges[n]) {
+							//if (lastChange[e.other] < dMinOne) continue;
+							for (auto eKnn : knn[e.other]) {
+								if (eKnn.second == dMinOne && !knn[n].contains(eKnn.first)) {
+									knn[n].insert(eKnn.first, distance);
+									stop = false;
+									changed = true;
+									//lastChange[n] = distance;
+								}
+							}
+						}
+						if (changed) {
+							for (auto e : edges[n]) {
+								nextChange[e.other] = nextChange[e.other] == -1 ? -1 : distance;
+							}
+							if (knn[n].size() >= k) {
+								lastChange[n] = -1; // Mark as done
+								nextChange[n] = -1; 
+							}
+						}
+					}
+					return stop;
+					};
+				stop = Threadpool::divideWork<bool>(f, N, [](bool A, bool B)->bool {return A && B; });
+				distance += 1;
+				std::swap(nextChange, lastChange);
+			}
+
+		}
 
 
 		void saveToVNA(std::string path) {
@@ -897,6 +1124,8 @@ namespace NNPNet {
 					Y[i * ((size_t)outputDim) + d] = (Y[i * ((size_t)outputDim) + d] - min[d]) / maxSize;
 				}
 			}
+			free(min);
+			free(max);
 		};
 
 		T getDistanceBetween(int n0, int n1) {
