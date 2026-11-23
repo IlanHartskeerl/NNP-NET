@@ -462,11 +462,11 @@ int main(int argc, char* argv[])
 	std::string outPath;
 
 	std::unordered_map<Argument, double> settings;
-	settings[ARG_SMOOTH] = 2;
+	settings[ARG_SMOOTH] = 3;
 	settings[ARG_THETA] = 0.25;
 	settings[ARG_GPU] = 0;
 	settings[ARG_PERP] = 40;
-	settings[ARG_METHOD] = METHOD_GLNET;
+	settings[ARG_METHOD] = METHOD_NNPNET;
 	settings[ARG_EMBEDDING_SIZE] = 50;
 	settings[ARG_SUBGRAPH_SIZE] = 10000;
 	settings[ARG_PMDS_PIVOTS] = 250;
