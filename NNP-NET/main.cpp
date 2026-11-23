@@ -9,8 +9,6 @@
 namespace fs = std::filesystem;
 
 #include <cstring>
-#include "windows.h"
-#include "psapi.h"
 
 #include "main.h"
 #include "Graph.h"
@@ -134,7 +132,7 @@ void calculateMetrics(Graph<double>& g, std::unordered_map<Argument, double>& se
 
 template<class T>
 void createLayoutFor(std::string path, std::string outPath, std::unordered_map<Argument, double>& settings) {
-	
+
 	switch ((Method)(int)settings[ARG_METHOD]) {
 	case METHOD_NNPNET:
 	{
@@ -221,7 +219,7 @@ void createLayoutFor(std::string path, std::string outPath, std::unordered_map<A
 			if (!g.checkFullyConnected()) {
 				std::cout << g.nodeCount << "\n";
 				g.onlyConnectedFrom(0);
-				std::cout << "Oeps not fully connected, force fully connected\n";
+				std::cout << "Not fully connected, force fully connected\n";
 				std::cout << g.nodeCount << "\n";
 			}
 			g.fillNodeNames();
@@ -314,7 +312,7 @@ void createLayoutFor(std::string path, std::string outPath, std::unordered_map<A
 			if (!g.checkFullyConnected()) {
 				std::cout << g.nodeCount << "\n";
 				g.onlyConnectedFrom(0);
-				std::cout << "Oeps not fully connected, force fully connected\n";
+				std::cout << "Not fully connected, force fully connected\n";
 				std::cout << g.nodeCount << "\n";
 			}
 			Log::addEntry(g.nodeCount, "Node Count");
@@ -364,7 +362,7 @@ void createLayoutFor(std::string path, std::string outPath, std::unordered_map<A
 		if (!g.checkFullyConnected()) {
 			std::cout << g.nodeCount << "\n";
 			g.onlyConnectedFrom(0);
-			std::cout << "Oeps not fully connected, force fully connected\n";
+			std::cout << "Not fully connected, force fully connected\n";
 			std::cout << g.nodeCount << "\n";
 		}
 
@@ -441,7 +439,8 @@ void printSettings(std::unordered_map<Argument, double>& settings) {
 			<< "\tk: " << (settings[ARG_KNN_K] > 2 ? std::to_string(settings[ARG_KNN_K]) : std::string("Auto")) << "\n"
 			<< "\tPerplexity: " << settings[ARG_PERP] << "\n"
 			<< "\tSubgraph size: " << (int)settings[ARG_SUBGRAPH_SIZE] << "\n"
-			<< "\tTheta: " << settings[ARG_THETA] << "\n";
+			<< "\tTheta: " << settings[ARG_THETA] << "\n"
+			<< "\tSmoothing passes: " << settings[ARG_SMOOTH] << "\n";
 		break;
 	}
 
@@ -542,7 +541,7 @@ int main(int argc, char* argv[])
 				else if (argS == "tsNET*" || argS == "tsnet*" || argS == "TSNET*") {
 					settings[setting] = METHOD_TSNETSTAR;
 				}
-				else if (argS == "GLNET" || argS == "GL-NET" || argS == "GL-net" || argS == "GL-Net" || argS == "GLNet" || argS == "GLnet" || argS == "gl-net" || argS == "GLNET" ) {
+				else if (argS == "GLNET" || argS == "GL-NET" || argS == "GL-net" || argS == "GL-Net" || argS == "GLNet" || argS == "GLnet" || argS == "gl-net" || argS == "GLNET") {
 					settings[setting] = METHOD_GLNET;
 				}
 				else if (argS == "pmds" || argS == "PMDS" || argS == "Pmds" || argS == "PivotMDS" || argS == "pivotmds" || argS == "pivotMDS") {
@@ -586,7 +585,7 @@ int main(int argc, char* argv[])
 				splittedPath = Utils::split(p, '/');
 			}
 			std::string fileName = splittedPath[splittedPath.size() - 1];
-			
+
 			std::cout << "\nCurrent file: " << p << "\n";
 			std::string oPath;
 
@@ -611,7 +610,7 @@ int main(int argc, char* argv[])
 			else {
 				createLayoutFor<double>(p, oPath, settings);
 			}
-			
+
 		}
 	}
 	Log::save();

@@ -9,7 +9,9 @@
 #include <math.h>
 #include <fstream>
 #include <cstring>
+#include <functional>
 #include "CustomDict.h"
+#include "Threading.h"
 
 #include "Utils.h"
 
@@ -46,10 +48,10 @@ namespace NNPNet {
 
 		Graph(int outputDimensions) : edges() { this->outputDim = outputDimensions; };
 
-		Graph(size_t outputDimensions, size_t nodeCount) : edges() { 
-			this->outputDim = outputDimensions; 
+		Graph(size_t outputDimensions, size_t nodeCount) : edges() {
+			this->outputDim = outputDimensions;
 			this->nodeCount = nodeCount;
-			Y = (T*)malloc(outputDimensions*nodeCount*sizeof(T));
+			Y = (T*)malloc(outputDimensions * nodeCount * sizeof(T));
 			edges.resize(nodeCount);
 		};
 
@@ -176,7 +178,7 @@ namespace NNPNet {
 				}
 				auto lowest = stack.begin()->second[stack.begin()->second.size() - 1];
 				auto length = stack.begin()->first;
-				
+
 				stack.begin()->second.pop_back();
 				if (visited[lowest] || (update && distances[lowest] <= lowest)) {
 					continue;
@@ -387,7 +389,7 @@ namespace NNPNet {
 			int curDist = 1;
 			while (curList.size() > 0) {
 				nextList.clear();
-				
+
 				if (update) {
 					for (int s : curList) {
 						for (const auto& edge : edges[s]) {
@@ -457,7 +459,7 @@ namespace NNPNet {
 				temp = _mm256_sub_ps(_a[start], _b[start]);
 				_mm256_add_ps(current, _mm256_mul_ps(temp, temp));
 			}
-			float* _t = (float*)(void*) & current;
+			float* _t = (float*)(void*)&current;
 			T res = _t[0] + _t[1] + _t[2] + _t[3] + _t[4] + _t[5] + _t[6] + _t[7];
 #else
 			T res = 0;
@@ -465,7 +467,7 @@ namespace NNPNet {
 #endif
 			for (int i = start; i < featureDimensions; i++) {
 				T temp = features[a * featureDimensions + i] - features[b * featureDimensions + i];
-				res += temp*temp;
+				res += temp * temp;
 			}
 			return res;
 		};
@@ -666,7 +668,7 @@ namespace NNPNet {
 			normalize();
 		}
 
-		void loadFromTXT(std::string path) 
+		void loadFromTXT(std::string path)
 		{
 			std::ifstream infile(path);
 
@@ -690,7 +692,7 @@ namespace NNPNet {
 			}
 
 			Y = (T*)malloc(nodeCount * outputDim * sizeof(T));
-			
+
 		}
 
 		void loadFromTAB(std::string path) {
@@ -698,7 +700,7 @@ namespace NNPNet {
 			std::string pathEdges = path.substr(0, path.length() - 3) + "EDGES.tab";
 
 			// Parse nodes -----------------------------------------------
-			
+
 			std::ifstream infile(pathNode);
 			std::string line;
 
@@ -716,7 +718,7 @@ namespace NNPNet {
 					}
 				}
 			}
-			
+
 			features = (float*)calloc(featureDimensions * nodeCount, sizeof(float));
 
 			// Lines
@@ -849,7 +851,7 @@ namespace NNPNet {
 		bool* checkNodesInAllTimeSeries(std::string path) {
 			std::vector<char> inAll;
 			inAll.resize(nodeCount);
-			
+
 			for (int j = 0; j < nodeCount; j++) {
 				inAll[j] = true;
 			}
@@ -858,7 +860,7 @@ namespace NNPNet {
 			std::string tsdPath = path.substr(0, path.size() - 4) + std::to_string(i) + ".tsd";
 			// while (std::filesystem::exists(tsdPath)) {
 			// 	std::ifstream infile(tsdPath);
-				
+
 			// 	std::string line;
 
 			// 	while (std::getline(infile, line)) {
@@ -891,7 +893,7 @@ namespace NNPNet {
 					nodeNames[i] = i;
 				}
 			}
-			
+
 			bfs(id, distances);
 			for (int i = nodeCount - 1; i >= 0; i--) {
 				if (distances[i] == -1) {
@@ -931,7 +933,7 @@ namespace NNPNet {
 		}
 
 		void knnWithFeatures(int source, int* nodes, T* distances, int k, T featureWeight) {
-			
+
 			T* d = (T*)malloc(nodeCount * sizeof(T));
 			getDistances(source, d);
 			addFeaturesToDistances(source, featureWeight, d);
@@ -963,7 +965,7 @@ namespace NNPNet {
 						int n = e.other;
 						if (!done[n] && knn[n].count(curSource) == 0) {
 							knn[n][curSource] = distance;
-							next.insert({n, curSource});
+							next.insert({ n, curSource });
 						}
 					}
 				}
@@ -995,19 +997,29 @@ namespace NNPNet {
 			bool stop = false;
 			// bfs based knn all at the same time
 			while (!stop) {
-				std::function<bool (int, int)> f = [this, &knn, k, distance, &lastChange, &nextChange](int begin, int end)->int {
+				std::function<bool(int, int)> f = [this, &knn, k, distance, &lastChange, &nextChange](int begin, int end)->int {
 					bool stop = true;
 					int dMinOne = distance - 1;
+					union data8 {
+						__m256i i;
+						__m256 f;
+						int full[8];
+					};
 					__m256i dist8 = _mm256_set1_epi32(dMinOne - 1);
 					for (int n = begin; n < end; n++) {
 						if (end - n >= 8) {
-							int a = _mm256_movemask_ps(*((__m256*) & _mm256_cmpgt_epi32((*(__m256i*)(lastChange.data() + n)), dist8)));
+							data8 inp;
+							memcpy(&inp, lastChange.data() + n, sizeof(inp));
+							data8 res;
+							res.i = _mm256_cmpgt_epi32(inp.i, dist8);
+							int a = _mm256_movemask_ps(res.f);
 							if (0 == a) {
 								n += 7;
 								continue;
 							}
 							for (n; lastChange[n] < dMinOne; n++);
-						} else if (lastChange[n] != dMinOne) continue;
+						}
+						else if (lastChange[n] != dMinOne) continue;
 						bool changed = false;
 						if (knn[n].size() >= k) { // Check again because of multithread race condition
 							lastChange[n] = -1; // Mark as done
@@ -1031,7 +1043,7 @@ namespace NNPNet {
 							}
 							if (knn[n].size() >= k) {
 								lastChange[n] = -1; // Mark as done
-								nextChange[n] = -1; 
+								nextChange[n] = -1;
 							}
 						}
 					}
@@ -1167,7 +1179,7 @@ namespace NNPNet {
 			}
 
 			for (int i = 0; i < nodeCount * featureDimensions; i++) {
-				if (features[i] > max[i%featureDimensions]) max[i % featureDimensions] = features[i];
+				if (features[i] > max[i % featureDimensions]) max[i % featureDimensions] = features[i];
 				if (features[i] < min[i % featureDimensions]) min[i % featureDimensions] = features[i];
 			}
 
